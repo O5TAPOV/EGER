@@ -111,7 +111,7 @@ body {
   --num: 46px;
   --name: 220px;
   --row1: 32px;
-  --row2: 108px;
+  --row2: 156px;
   width: 100%;
   max-width: 100%;
   overflow: auto;
@@ -231,51 +231,72 @@ body {
 }
 
 .sheet-grid .lesson-col {
-  width: 92px;
-  min-width: 92px;
-  padding: 2px 4px;
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  padding: 4px 2px 2px;
+  vertical-align: top;
 }
 
 .sheet-grid .lesson-no {
   display: block;
+  padding-right: 8px;
   font-size: 10px;
   font-weight: 500;
+  line-height: 1;
   color: #a8a29e;
+}
+
+.sheet-grid .lesson-code {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 124px;
+  padding-right: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #e7e5e4;
 }
 
 .sheet-grid .lesson-date,
 .sheet-grid .sheet-date-button {
-  display: block;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  writing-mode: vertical-rl;
+  height: 118px;
+  margin: 6px auto 0;
   border: 0;
   background: transparent;
   color: #e7e5e4;
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  line-height: 1.2;
+  letter-spacing: 0.03em;
+  line-height: 1;
   padding: 0;
+  white-space: nowrap;
 }
 
 .sheet-grid .sheet-date-button {
   cursor: pointer;
 }
 
-.sheet-grid .sheet-date-button:hover {
+.sheet-grid .sheet-date-button:hover,
+.sheet-grid .sheet-date-button:focus-visible {
   color: #e3b15a;
 }
 
-.sheet-grid .sheet-date {
-  width: 100%;
-  margin-top: 2px;
-  border: 1px solid #234536;
-  border-radius: 6px;
-  background: #0d1c16;
-  color: #e7e5e4;
-  color-scheme: dark;
-  font: inherit;
-  font-size: 11px;
-  padding: 1px 2px;
+.sheet-grid .sheet-date-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .sheet-grid .sheet-col-delete,
@@ -289,7 +310,13 @@ body {
 }
 
 .sheet-grid .sheet-col-delete {
-  font-size: 14px;
+  position: absolute;
+  top: 1px;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  font-size: 13px;
 }
 
 .sheet-row-delete {

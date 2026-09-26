@@ -26,6 +26,8 @@ public class JournalSheet
 
     public bool Finalized { get; set; }
 
+    public bool LegendCustomized { get; set; }
+
     public List<string> HiddenStudentIds { get; set; } = [];
 
     public List<SheetLegend> Legend { get; set; } = [];

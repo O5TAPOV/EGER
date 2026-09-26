@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, errorText, todayInput } from "../api/client";
+import { api, errorText } from "../api/client";
 import DarkSelect from "./DarkSelect";
 import { Field } from "./Modal";
 import { useToast } from "../context/ToastContext";
@@ -147,13 +147,58 @@ function findCell(cells, column) {
   return cells?.find((cell) => cell.sessionId === column.id) ?? { display: "", points: null, absent: false };
 }
 
+function columnDeleteLabel(column) {
+  const name = column.code ? `${column.kind} ${column.code}` : `${column.kind} ${column.number}`;
+  return column.dateLabel ? `${name}, ${column.dateLabel}` : name;
+}
+
+function LessonHead({ column, editable, onDate, onDelete }) {
+  const inputRef = useRef(null);
+  const openPicker = () => {
+    const input = inputRef.current;
+    if (!input) return;
+    if (typeof input.showPicker === "function") input.showPicker();
+    else input.focus();
+  };
+
+  return (
+    <th className="lesson-col" title={column.legend || undefined}>
+      <span className={column.dateLabel ? "lesson-no" : "lesson-no lesson-code"}>{column.code || column.number}</span>
+      {column.dateLabel ? (
+        editable ? (
+          <>
+            <button type="button" className="sheet-date-button" onClick={openPicker}>
+              {column.dateLabel}
+            </button>
+            <input
+              ref={inputRef}
+              className="sheet-date-picker"
+              type="date"
+              tabIndex={-1}
+              aria-label={`Дата колонки ${column.code || column.number}`}
+              value={column.dateValue}
+              onChange={(event) => onDate(column.id, event.target.value)}
+            />
+          </>
+        ) : (
+          <span className="lesson-date">{column.dateLabel}</span>
+        )
+      ) : null}
+      {editable && (
+        <button type="button" className="sheet-col-delete" aria-label={`Видалити колонку ${columnDeleteLabel(column)}`} onClick={() => onDelete(column)}>
+          ×
+        </button>
+      )}
+    </th>
+  );
+}
+
 export default function Gradebook({ subjectId, group, studentId, linkBase, allowColumn = false }) {
   const { push } = useToast();
   const [register, setRegister] = useState(null);
   const [loading, setLoading] = useState(false);
   const [blocked, setBlocked] = useState("");
   const [kind, setKind] = useState("Лекція");
-  const [columnDate, setColumnDate] = useState(todayInput());
   const [columnMax, setColumnMax] = useState("2");
   const [legend, setLegend] = useState("");
   const [legendDraft, setLegendDraft] = useState([]);
@@ -272,7 +317,6 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
         group: register.group,
         kind,
         maxPoints: Number(columnMax),
-        date: kind === "Контроль" || !columnDate ? null : new Date(`${columnDate}T00:00:00Z`).toISOString(),
         legend: kind === "Контроль" ? legend : null,
       });
       setBlocked("");
@@ -303,8 +347,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
   };
 
   const deleteColumn = async (column) => {
-    const label = column.dateLabel ? `${column.number} (${column.dateLabel})` : (column.code || column.number);
-    if (!window.confirm(`Видалити колонку ${label} з відомості? Бали в ній буде знято.`)) return;
+    if (!window.confirm(`Точно видалити колонку «${columnDeleteLabel(column)}»? Бали в ній буде знято.`)) return;
     setBusy(true);
     try {
       await api.delete(`/academic/register/columns/${column.id}`);
@@ -318,7 +361,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
 
   const hideStudent = async (row) => {
     if (!register) return;
-    if (!window.confirm(`Прибрати ${row.fullName} з цієї відомості? Обліковий запис студента не видаляється.`)) return;
+    if (!window.confirm(`Точно прибрати «${row.fullName}» з цієї відомості? Обліковий запис студента не видаляється.`)) return;
     setBusy(true);
     try {
       await api.delete("/academic/register/rows", {
@@ -332,9 +375,10 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
     }
   };
 
-  const saveLegend = async () => {
+  const persistLegend = async (draft, successText) => {
     if (!register) return;
-    if (legendDraft.some((item) => !item.code.trim())) {
+    const meaningful = draft.filter((item) => item.previousCode || item.code.trim() || item.text.trim());
+    if (meaningful.some((item) => !item.code.trim())) {
       const text = "Вкажіть код позначення.";
       setBlocked(text);
       push(text, "error");
@@ -345,7 +389,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
       await api.put("/academic/register/legend", {
         subjectId: register.subjectId,
         group: register.group,
-        entries: legendDraft.map((item) => ({
+        entries: meaningful.map((item) => ({
           previousCode: item.previousCode || null,
           code: item.code.trim(),
           text: item.text.trim(),
@@ -353,7 +397,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
       });
       setBlocked("");
       await load();
-      push("Умовні позначення збережено");
+      push(successText);
     } catch (error) {
       const text = errorText(error, "Не вдалося зберегти позначення");
       setBlocked(text);
@@ -361,6 +405,32 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
     } finally {
       setBusy(false);
     }
+  };
+
+  const addLegendRow = () => {
+    const pending = legendDraft.filter((item) => !item.previousCode).length;
+    if (pending >= 5) {
+      const text = "За один раз можна додати не більше п'яти позначень. Спочатку збережіть їх.";
+      setBlocked(text);
+      push(text, "error");
+      return;
+    }
+    setBlocked("");
+    setLegendDraft((current) => [...current, { previousCode: "", code: "", text: "" }]);
+  };
+
+  const cancelLegendRow = (index) => {
+    setLegendDraft((current) => current.filter((_, entryIndex) => entryIndex !== index));
+  };
+
+  const deleteLegendRow = (index) => {
+    const item = legendDraft[index];
+    const label = (item.code || item.previousCode).trim();
+    if (!window.confirm(`Точно видалити позначення «${label}»?`)) return;
+    persistLegend(
+      legendDraft.filter((_, entryIndex) => entryIndex !== index),
+      "Позначення видалено",
+    );
   };
 
   if (!subjectId || (allowColumn && !group)) return null;
@@ -376,34 +446,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
   const editable = register.canEdit && !busy;
   const columnCount = 2 + lectures.length + works.length + controls.length + 5;
 
-  const lessonHead = (column) => (
-    <th key={column.id} className="lesson-col" title={column.legend || undefined}>
-      <span className="lesson-no">{column.code || column.number}</span>
-      {column.dateLabel ? (
-        editable ? (
-          <button type="button" className="sheet-date-button" onClick={(event) => event.currentTarget.nextElementSibling?.showPicker?.() || event.currentTarget.nextElementSibling?.focus()}>
-            {column.dateLabel}
-          </button>
-        ) : (
-          <span className="lesson-date">{column.dateLabel}</span>
-        )
-      ) : null}
-      {editable && column.dateValue ? (
-        <input
-          className="sheet-date"
-          type="date"
-          aria-label={`Дата колонки ${column.number}`}
-          value={column.dateValue}
-          onChange={(event) => changeDate(column.id, event.target.value)}
-        />
-      ) : null}
-      {editable && (
-        <button type="button" className="sheet-col-delete" aria-label="Видалити колонку" onClick={() => deleteColumn(column)}>
-          ×
-        </button>
-      )}
-    </th>
-  );
+  const pendingLegend = legendDraft.filter((item) => !item.previousCode).length;
 
   return (
     <div className="space-y-3">
@@ -449,10 +492,18 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                 <th className="group-col" colSpan={5}>Підсумок</th>
               </tr>
               <tr>
-                {lectures.map(lessonHead)}
-                {labs.map(lessonHead)}
-                {practicals.map(lessonHead)}
-                {controls.map(lessonHead)}
+                {lectures.map((column) => (
+                  <LessonHead key={column.id} column={column} editable={editable} onDate={changeDate} onDelete={deleteColumn} />
+                ))}
+                {labs.map((column) => (
+                  <LessonHead key={column.id} column={column} editable={editable} onDate={changeDate} onDelete={deleteColumn} />
+                ))}
+                {practicals.map((column) => (
+                  <LessonHead key={column.id} column={column} editable={editable} onDate={changeDate} onDelete={deleteColumn} />
+                ))}
+                {controls.map((column) => (
+                  <LessonHead key={column.id} column={column} editable={editable} onDate={changeDate} onDelete={deleteColumn} />
+                ))}
                 <th className="sum-col">Результати поточного контролю</th>
                 <th className="sum-col">Залік / Екзамен</th>
                 <th className="sum-col">Кількість балів</th>
@@ -598,20 +649,28 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                     )));
                   }}
                 />
+                {item.previousCode ? (
+                  <button type="button" className="btn-ghost" disabled={busy} onClick={() => deleteLegendRow(index)}>
+                    Видалити
+                  </button>
+                ) : (
+                  <button type="button" className="btn-ghost" onClick={() => cancelLegendRow(index)}>
+                    Скасувати
+                  </button>
+                )}
               </div>
             ))}
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() => setLegendDraft((current) => [...current, { previousCode: "", code: "", text: "" }])}
-              >
+              <button type="button" className="btn-ghost" disabled={pendingLegend >= 5} onClick={addLegendRow}>
                 Додати позначення
               </button>
-              <button type="button" className="btn-primary" disabled={busy} onClick={saveLegend}>
+              <button type="button" className="btn-primary" disabled={busy} onClick={() => persistLegend(legendDraft, "Умовні позначення збережено")}>
                 Зберегти позначення
               </button>
             </div>
+            {pendingLegend >= 5 && (
+              <p className="text-sm text-stone-400">За один раз можна додати не більше п&apos;яти позначень. Спочатку збережіть їх.</p>
+            )}
           </div>
         ) : legendDraft.length === 0 ? (
           <p>Позначень ще немає.</p>
@@ -649,11 +708,6 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
               options={COLUMN_KINDS}
             />
           </Field>
-          {kind !== "Контроль" && (
-            <Field label="Дата">
-              <input className="field w-40" type="date" required value={columnDate} onChange={(event) => setColumnDate(event.target.value)} />
-            </Field>
-          )}
           {kind === "Контроль" && (
             <Field label="Пояснення">
               <input className="field w-64" value={legend} onChange={(event) => setLegend(event.target.value)} placeholder="Наступний вільний код C1–C6" />
@@ -663,6 +717,11 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
             <input className="field w-24" type="number" min="1" max="100" required value={columnMax} onChange={(event) => setColumnMax(event.target.value)} />
           </Field>
           <button type="submit" className="btn-primary" disabled={busy}>Додати колонку</button>
+          {kind !== "Контроль" && (
+            <p className="w-full text-sm text-stone-400">
+              Дату ставить система: сьогодні, якщо колонок цього типу ще немає, інакше через тиждень після останньої. У шапці її можна змінити.
+            </p>
+          )}
         </form>
       )}
     </div>

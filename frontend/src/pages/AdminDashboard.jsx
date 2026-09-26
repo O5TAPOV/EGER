@@ -136,7 +136,7 @@ export default function AdminDashboard() {
   };
 
   const remove = async (kind, id, name) => {
-    if (!window.confirm(`Видалити «${name}»?`)) return;
+    if (!window.confirm(`Точно видалити «${name}»?`)) return;
     try {
       const path = kind === "student" ? "students" : kind === "professor" ? "professors" : "subjects";
       await api.delete(`/${path}/${id}`);

@@ -79,8 +79,6 @@ public class RegisterService
         var kind = request.Kind.Trim();
         if (kind is not (JournalColumns.Lecture or JournalColumns.Laboratory or JournalColumns.Practical or JournalColumns.Control))
             throw new AppException(400, "Невідомий тип колонки");
-        if (kind != JournalColumns.Control && request.Date is null)
-            throw new AppException(400, "Вкажіть дату заняття");
 
         var subject = await RequireSubjectAsync(request.SubjectId, ct);
         await EnsureTeachesAsync(actor, subject, ct);
@@ -95,11 +93,12 @@ public class RegisterService
         var legend = kind == JournalColumns.Control
             ? (string.IsNullOrWhiteSpace(request.Legend) ? code : request.Legend.Trim())
             : "";
+        var date = request.Date ?? (kind == JournalColumns.Control ? null : NextLessonDate(sessions, kind));
         await _sessions.CreateAsync(new ClassSession
         {
             SubjectId = subject.Id,
             Group = group,
-            Date = Dates.NormalizeUtc(request.Date),
+            Date = Dates.NormalizeUtc(date),
             GradeType = JournalColumns.ToGradeType(kind),
             ColumnKind = kind,
             Number = number,
@@ -236,6 +235,7 @@ public class RegisterService
         }
 
         sheet.Legend = stored;
+        sheet.LegendCustomized = true;
         await _sheets.UpdateAsync(sheet, ct);
         return await BuildGroupAsync(subject, group, ct);
     }
@@ -602,6 +602,21 @@ public class RegisterService
         };
     }
 
+    private static DateTime NextLessonDate(IEnumerable<ClassSession> sessions, string kind)
+    {
+        DateTime? last = null;
+        foreach (var session in sessions)
+        {
+            if (ResolveKind(session) != kind || session.Date == default)
+                continue;
+            var day = session.Date.Date;
+            if (last is null || day > last.Value)
+                last = day;
+        }
+
+        return (last ?? DateTime.UtcNow.Date).AddDays(last is null ? 0 : 7);
+    }
+
     private static List<LegendEntryResponse> MergeLegend(JournalSheet sheet, IReadOnlyList<RegisterColumnResponse> controls)
     {
         var result = new List<LegendEntryResponse>();
@@ -616,6 +631,9 @@ public class RegisterService
                 text = controls.FirstOrDefault(column => string.Equals(column.Code, code, StringComparison.OrdinalIgnoreCase))?.Legend ?? code;
             result.Add(new LegendEntryResponse { Code = code, Text = text });
         }
+
+        if (sheet.LegendCustomized)
+            return result;
 
         foreach (var column in controls)
         {
