@@ -209,7 +209,7 @@ public class GradeRequest
 
     public string? ProfessorId { get; set; }
 
-    [Range(0, 100, ErrorMessage = "Оцінка має бути від 0 до 100")]
+    [Range(0, 100, ErrorMessage = "Бали мають бути від 0 до 100")]
     public int GradeValue { get; set; }
 
     public DateTime? Date { get; set; }
@@ -225,7 +225,7 @@ public class BulkGradeItem
     [Required(ErrorMessage = "Студент обов'язковий")]
     public string StudentId { get; set; } = "";
 
-    [Range(0, 100, ErrorMessage = "Оцінка має бути від 0 до 100")]
+    [Range(0, 100, ErrorMessage = "Бали мають бути від 0 до 100")]
     public int GradeValue { get; set; }
 
     [Required(ErrorMessage = "Тип оцінювання обов'язковий")]
@@ -282,8 +282,8 @@ public class OverviewResponse
     public long Subjects { get; set; }
     public long Grades { get; set; }
     public double AverageScore { get; set; }
-    public double AverageGpa { get; set; }
     public double PassRate { get; set; }
+    public int PassThreshold { get; set; }
 }
 
 public class DistributionBucket
@@ -300,8 +300,8 @@ public class ClassAnalyticsResponse
     public int StudentCount { get; set; }
     public int GradeCount { get; set; }
     public double AverageScore { get; set; }
-    public double AverageGpa { get; set; }
     public double PassRate { get; set; }
+    public int PassThreshold { get; set; }
     public List<DistributionBucket> Distribution { get; set; } = [];
 }
 
@@ -315,7 +315,6 @@ public class TranscriptItem
     public string GradeType { get; set; } = "";
     public DateTime Date { get; set; }
     public string ProfessorName { get; set; } = "";
-    public double GpaPoints { get; set; }
 }
 
 public class StudentAnalyticsResponse
@@ -324,8 +323,8 @@ public class StudentAnalyticsResponse
     public string FullName { get; set; } = "";
     public string Group { get; set; } = "";
     public double AverageScore { get; set; }
-    public double AverageGpa { get; set; }
     public double PassRate { get; set; }
+    public int PassThreshold { get; set; }
     public int GradeCount { get; set; }
     public List<TranscriptItem> Transcript { get; set; } = [];
 }

@@ -13,17 +13,20 @@ public class GradeService
     private readonly IStudentRepository _students;
     private readonly IProfessorRepository _professors;
     private readonly ISubjectRepository _subjects;
+    private readonly IGradingSettingsRepository _settings;
 
     public GradeService(
         IGradeRepository grades,
         IStudentRepository students,
         IProfessorRepository professors,
-        ISubjectRepository subjects)
+        ISubjectRepository subjects,
+        IGradingSettingsRepository settings)
     {
         _grades = grades;
         _students = students;
         _professors = professors;
         _subjects = subjects;
+        _settings = settings;
     }
 
     public async Task<IReadOnlyList<GradeResponse>> ListAsync(
@@ -174,6 +177,7 @@ public class GradeService
                 existing.GradeType = item.GradeType;
                 existing.Date = Dates.NormalizeUtc(item.Date);
                 existing.ProfessorId = professor.Id;
+                await EnsureLimitsAsync(existing, existing.Id, ct);
                 await _grades.UpdateAsync(existing, ct);
                 grade = existing;
             }
@@ -188,6 +192,7 @@ public class GradeService
                     GradeType = item.GradeType,
                     Date = Dates.NormalizeUtc(item.Date)
                 };
+                await EnsureLimitsAsync(grade, null, ct);
                 await _grades.CreateAsync(grade, ct);
             }
 
@@ -213,7 +218,7 @@ public class GradeService
         if (existing is not null && actor.Role == Roles.Professor && existing.ProfessorId != professor.Id)
             throw new AppException(403, "Можна змінювати лише власні оцінки");
 
-        return new Grade
+        var grade = new Grade
         {
             Id = existing?.Id ?? "",
             StudentId = student.Id,
@@ -223,6 +228,30 @@ public class GradeService
             GradeType = request.GradeType,
             Date = Dates.NormalizeUtc(request.Date)
         };
+        await EnsureLimitsAsync(grade, existing?.Id, ct);
+        return grade;
+    }
+
+    private async Task EnsureLimitsAsync(Grade incoming, string? replacingId, CancellationToken ct)
+    {
+        if (incoming.GradeValue < 0)
+            throw new AppException(400, "Бали не можуть бути від'ємними");
+
+        var settings = await _settings.GetAsync(ct);
+        var rows = (await _grades.GetByStudentAsync(incoming.StudentId, ct))
+            .Where(row => row.SubjectId == incoming.SubjectId && row.Id != replacingId)
+            .ToList();
+        rows.Add(incoming);
+
+        var finals = rows.Where(row => GradeTypes.IsFinal(row.GradeType)).ToList();
+        if (finals.Count > 1)
+            throw new AppException(400, "Підсумок для цього студента з дисципліни можна виставити лише один раз");
+        if (finals.Any(row => row.GradeValue > settings.FinalMax))
+            throw new AppException(400, $"Підсумок не може перевищувати {settings.FinalMax} балів");
+
+        var currentSum = rows.Where(row => GradeTypes.IsCurrent(row.GradeType)).Sum(row => row.GradeValue);
+        if (currentSum > settings.CurrentMax)
+            throw new AppException(400, $"Сума поточних балів не може перевищувати {settings.CurrentMax}");
     }
 
     private async Task<Professor> ResolveProfessorAsync(Actor actor, Subject subject, string? requestedProfessorId, CancellationToken ct)

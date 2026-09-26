@@ -1,10 +1,23 @@
 import { GraduationCap, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { roleLabel, useAuth } from "../context/AuthContext";
+
+const NAV = {
+  Admin: [
+    { to: "/admin", label: "Кабінет", end: true },
+    { to: "/admin/at-risk", label: "Група ризику" },
+  ],
+  Professor: [
+    { to: "/professor", label: "Відомість", end: true },
+    { to: "/professor/at-risk", label: "Група ризику" },
+  ],
+  Student: [{ to: "/student", label: "Картка", end: true }],
+};
 
 export default function Layout({ title, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const links = NAV[user?.role] || [];
 
   const onLogout = async () => {
     await logout();
@@ -29,6 +42,18 @@ export default function Layout({ title, children }) {
             Вийти
           </button>
         </div>
+        <nav className="flex gap-2 overflow-x-auto px-4 pb-4 md:block md:space-y-1 md:px-3">
+          {links.map((link) => (
+            <NavLink
+              key={link.to}
+              to={link.to}
+              end={link.end}
+              className={({ isActive }) => (isActive ? "nav-link-active whitespace-nowrap" : "nav-link whitespace-nowrap")}
+            >
+              {link.label}
+            </NavLink>
+          ))}
+        </nav>
         <div className="hidden px-5 pb-6 md:block">
           <p className="text-sm font-medium text-stone-100">{user?.fullName}</p>
           <p className="text-xs text-eger-mint">{roleLabel(user?.role)}</p>

@@ -1,28 +1,29 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
-import { api, errorText, formatDate } from "../api/client";
+import { api, errorText } from "../api/client";
 import Layout from "../components/Layout";
 import { Field } from "../components/Modal";
+import StudentCardView, { JournalPanel } from "../components/StudentCard";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
 export default function StudentDashboard() {
   const { user, refresh } = useAuth();
   const { push } = useToast();
-  const [profile, setProfile] = useState(null);
-  const [analytics, setAnalytics] = useState(null);
+  const [card, setCard] = useState(null);
+  const [journal, setJournal] = useState(null);
+  const [activeSubjectId, setActiveSubjectId] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [chatId, setChatId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [journalLoading, setJournalLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.get("/students/me"), api.get("/analytics/me")])
-      .then(([profileRes, analyticsRes]) => {
-        setProfile(profileRes.data);
-        setAnalytics(analyticsRes.data);
-      })
-      .catch((error) => push(errorText(error, "Не вдалося завантажити транскрипт"), "error"))
+    api
+      .get("/academic/card/me")
+      .then((response) => setCard(response.data))
+      .catch((error) => push(errorText(error, "Не вдалося завантажити картку"), "error"))
       .finally(() => setLoading(false));
   }, [push]);
 
@@ -30,6 +31,28 @@ export default function StudentDashboard() {
     setEnabled(Boolean(user?.is2FAEnabled));
     setChatId(user?.telegramChatId || "");
   }, [user]);
+
+  const openSubject = async (subject) => {
+    if (!card) return;
+    if (activeSubjectId === subject.subjectId) {
+      setActiveSubjectId("");
+      setJournal(null);
+      return;
+    }
+    setActiveSubjectId(subject.subjectId);
+    setJournalLoading(true);
+    try {
+      const { data } = await api.get("/academic/journal", {
+        params: { studentId: card.studentId, subjectId: subject.subjectId },
+      });
+      setJournal(data);
+    } catch (error) {
+      setJournal(null);
+      push(errorText(error, "Не вдалося відкрити журнал"), "error");
+    } finally {
+      setJournalLoading(false);
+    }
+  };
 
   const saveTwoFactor = async (event) => {
     event.preventDefault();
@@ -49,63 +72,15 @@ export default function StudentDashboard() {
   };
 
   return (
-    <Layout title="Кабінет студента">
+    <Layout title="Картка студента">
       {loading ? (
         <p className="text-stone-400">Завантаження...</p>
-      ) : !profile || !analytics ? (
-        <p className="text-stone-400">Не вдалося завантажити дані кабінету</p>
+      ) : !card ? (
+        <p className="text-stone-400">Не вдалося завантажити картку</p>
       ) : (
         <div className="space-y-6">
-          <section className="grid gap-4 md:grid-cols-[1.4fr_1fr]">
-            <article className="card">
-              <p className="text-sm text-stone-400">{profile.group} · вступ {profile.enrollmentYear}</p>
-              <h2 className="mt-1 text-2xl font-semibold">{profile.fullName}</h2>
-              <p className="mt-2 text-sm text-stone-300">Залікова книжка {profile.studentCardNumber}</p>
-              <p className="text-sm text-stone-500">{profile.email}</p>
-            </article>
-            <article className="card">
-              <p className="text-xs uppercase tracking-wide text-stone-400">Загальний середній бал</p>
-              <p className="mt-2 text-5xl font-semibold text-eger-gold">{analytics.averageGpa}</p>
-              <p className="mt-2 text-sm text-stone-300">Середній бал {analytics.averageScore} · успішність {analytics.passRate}%</p>
-              <p className="text-xs text-stone-500">Зважено за кредитами дисциплін за шкалою 4.0, прохідний бал — 60</p>
-            </article>
-          </section>
-
-          <section className="card">
-            <h2 className="mb-4 text-lg font-semibold">Транскрипт</h2>
-            {analytics.transcript.length === 0 ? (
-              <p className="text-sm text-stone-400">Оцінок ще немає</p>
-            ) : (
-              <div className="table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Дисципліна</th>
-                      <th>Кредити</th>
-                      <th>Тип</th>
-                      <th>Оцінка</th>
-                        <th>Бал 4.0</th>
-                      <th>Викладач</th>
-                      <th>Дата</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {analytics.transcript.map((item) => (
-                      <tr key={item.gradeId}>
-                        <td>{item.subjectTitle}</td>
-                        <td>{item.credits}</td>
-                        <td>{item.gradeType}</td>
-                        <td className={item.gradeValue >= 60 ? "text-eger-mint" : "text-red-300"}>{item.gradeValue}</td>
-                        <td>{item.gpaPoints}</td>
-                        <td>{item.professorName}</td>
-                        <td>{formatDate(item.date)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
+          <StudentCardView card={card} activeSubjectId={activeSubjectId} onSubject={openSubject} />
+          <JournalPanel journal={activeSubjectId ? journal : null} loading={journalLoading} />
 
           <section className="card">
             <div className="mb-3 flex items-center gap-2 text-eger-gold">

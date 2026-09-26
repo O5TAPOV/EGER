@@ -40,4 +40,22 @@ body {
   .data-table td {
     @apply border-b border-eger-line/70 px-3 py-3 align-middle;
   }
+  .badge {
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold;
+  }
+  .badge-debt {
+    @apply badge border-red-800 bg-red-950 text-red-200;
+  }
+  .badge-ok {
+    @apply badge border-emerald-800 bg-emerald-950 text-eger-mint;
+  }
+  .badge-wait {
+    @apply badge border-eger-line bg-black/30 text-stone-300;
+  }
+  .nav-link {
+    @apply block rounded-lg px-3 py-2 text-sm text-stone-300 hover:bg-white/5;
+  }
+  .nav-link-active {
+    @apply nav-link bg-eger-green text-eger-gold hover:bg-eger-green;
+  }
 }

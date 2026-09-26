@@ -35,13 +35,16 @@ export function errorText(error, fallback = "Сталася помилка") {
   return error.response.data?.message || fallback;
 }
 
-export const GRADE_TYPES = [
-  "Екзамен",
-  "Залік",
+export const CURRENT_GRADE_TYPES = [
+  "Відвідування",
+  "Домашнє завдання",
+  "Практична",
   "Модульний контроль",
-  "Курсова робота",
-  "Практика",
 ];
+
+export const FINAL_GRADE_TYPES = ["Залік", "Екзамен"];
+
+export const GRADE_TYPES = [...CURRENT_GRADE_TYPES, ...FINAL_GRADE_TYPES];
 
 export function formatDate(value) {
   if (!value) return "—";

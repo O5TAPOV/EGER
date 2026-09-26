@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { BookOpen, Pencil, Plus, Sprout, Trash2, Users } from "lucide-react";
 import { api, errorText } from "../api/client";
 import Layout from "../components/Layout";
@@ -36,22 +37,25 @@ export default function AdminDashboard() {
   const [professors, setProfessors] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [settings, setSettings] = useState(null);
   const [editor, setEditor] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [overviewRes, studentsRes, professorsRes, subjectsRes] = await Promise.all([
+      const [overviewRes, studentsRes, professorsRes, subjectsRes, settingsRes] = await Promise.all([
         api.get("/analytics/overview"),
         api.get("/students"),
         api.get("/professors"),
         api.get("/subjects"),
+        api.get("/settings/grading"),
       ]);
       setOverview(overviewRes.data);
       setStudents(studentsRes.data);
       setProfessors(professorsRes.data);
       setSubjects(subjectsRes.data);
+      setSettings(settingsRes.data);
     } catch (error) {
       push(errorText(error, "Не вдалося завантажити огляд"), "error");
     } finally {
@@ -64,7 +68,7 @@ export default function AdminDashboard() {
   }, []);
 
   const seed = async () => {
-    if (!window.confirm("Згенерувати демонстраційні дані? Повторний запуск не створює дублікати.")) {
+    if (!window.confirm("Згенерувати демонстраційні дані? Якщо журнал ще зі старої шкали, оцінки буде перебудовано. Новий набір не дублюється.")) {
       return;
     }
     setBusy(true);
@@ -113,6 +117,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const saveSettings = async (event) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const { data } = await api.put("/settings/grading", {
+        passThreshold: Number(settings.passThreshold),
+        currentMax: Number(settings.currentMax),
+        finalMax: Number(settings.finalMax),
+      });
+      setSettings(data);
+      push("Систему оцінювання збережено");
+    } catch (error) {
+      push(errorText(error, "Не вдалося зберегти систему оцінювання"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const remove = async (kind, id, name) => {
     if (!window.confirm(`Видалити «${name}»?`)) return;
     try {
@@ -133,6 +155,7 @@ export default function AdminDashboard() {
           ["students", "Студенти"],
           ["professors", "Викладачі"],
           ["subjects", "Дисципліни"],
+          ["grading", "Система оцінювання"],
         ].map(([id, label]) => (
           <button
             key={id}
@@ -157,10 +180,18 @@ export default function AdminDashboard() {
           <Stat icon={<Users size={18} />} label="Викладачі" value={overview.professors} />
           <Stat icon={<BookOpen size={18} />} label="Дисципліни" value={overview.subjects} />
           <Stat label="Оцінки" value={overview.grades} />
-          <Stat label="Середній бал" value={overview.averageScore} hint="за 100-бальною шкалою" />
-          <Stat label="Середній бал 4.0" value={overview.averageGpa} hint="зважено за кредитами" />
-          <Stat label="Успішність" value={`${overview.passRate}%`} hint="частка оцінок від 60 балів" />
+          <Stat label="Середній бал" value={overview.averageScore} hint="100-бальна шкала, середнє підсумків" />
+          <Stat label="Успішність" value={`${overview.passRate}%`} hint={`частка підсумків від ${overview.passThreshold} балів`} />
         </div>
+      )}
+
+      {!loading && tab === "grading" && settings && (
+        <GradingSettings
+          settings={settings}
+          busy={busy}
+          onChange={(key, value) => setSettings((current) => ({ ...current, [key]: value }))}
+          onSave={saveSettings}
+        />
       )}
 
       {!loading && tab === "students" && (
@@ -172,7 +203,9 @@ export default function AdminDashboard() {
             empty="Студентів ще немає"
             headers={["ПІБ", "Група", "Залікова книжка", "Пошта", "Рік", ""]}
             rows={students.map((item) => [
-              item.fullName,
+              <Link key={item.id} className="font-medium text-eger-gold hover:underline" to={`/admin/students/${item.id}`}>
+                {item.fullName}
+              </Link>,
               item.group,
               item.studentCardNumber,
               item.email,
@@ -358,6 +391,92 @@ export default function AdminDashboard() {
         </Modal>
       )}
     </Layout>
+  );
+}
+
+const ECTS_BANDS = [
+  ["90–100", "A", "4", "відмінно"],
+  ["80–89", "B", "4", "дуже добре"],
+  ["75–79", "C", "3", "добре"],
+  ["60–74", "D", "3", "задовільно"],
+  ["50–59", "E", "3", "достатньо"],
+  ["35–49", "FX", "—", "незадовільно"],
+  ["1–34", "F", "—", "неприйнятно"],
+];
+
+function GradingSettings({ settings, busy, onChange, onSave }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+      <form className="card space-y-3" onSubmit={onSave}>
+        <h2 className="text-lg font-semibold">Пороги</h2>
+        <p className="text-sm text-stone-400">
+          Разом = поточні + підсумок, максимум 100. Борг — це підсумок нижче мінімального бала зарахування.
+        </p>
+        <Field label="Мінімальний бал зарахування">
+          <input
+            className="field"
+            type="number"
+            min="1"
+            max="100"
+            required
+            value={settings.passThreshold}
+            onChange={(event) => onChange("passThreshold", event.target.value)}
+          />
+        </Field>
+        <Field label="Максимум поточних">
+          <input
+            className="field"
+            type="number"
+            min="1"
+            max="100"
+            required
+            value={settings.currentMax}
+            onChange={(event) => onChange("currentMax", event.target.value)}
+          />
+        </Field>
+        <Field label="Максимум підсумкових">
+          <input
+            className="field"
+            type="number"
+            min="1"
+            max="100"
+            required
+            value={settings.finalMax}
+            onChange={(event) => onChange("finalMax", event.target.value)}
+          />
+        </Field>
+        <button type="submit" className="btn-primary" disabled={busy}>
+          Зберегти
+        </button>
+      </form>
+      <section className="card">
+        <h2 className="mb-3 text-lg font-semibold">Шкала ECTS</h2>
+        <p className="mb-3 text-sm text-stone-400">
+          Для заліку статус — «зараховано», якщо разом не нижче порога, інакше «не зараховано». Для екзамену показується національна оцінка з таблиці.
+        </p>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Бали</th>
+                <th>ECTS</th>
+                <th>Національна</th>
+                <th>Екзамен</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ECTS_BANDS.map((band) => (
+                <tr key={band[1]}>
+                  {band.map((cell, index) => (
+                    <td key={`${band[1]}-${index}`}>{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   );
 }
 

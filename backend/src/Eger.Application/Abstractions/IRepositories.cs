@@ -67,6 +67,13 @@ public interface IGradeRepository
     Task UpdateAsync(Grade grade, CancellationToken ct = default);
     Task DeleteAsync(string id, CancellationToken ct = default);
     Task DeleteByStudentAsync(string studentId, CancellationToken ct = default);
+    Task DeleteAllAsync(CancellationToken ct = default);
     Task<long> CountAsync(CancellationToken ct = default);
     Task EnsureIndexesAsync(CancellationToken ct = default);
+}
+
+public interface IGradingSettingsRepository
+{
+    Task<Eger.Domain.Entities.GradingSettings> GetAsync(CancellationToken ct = default);
+    Task UpdateAsync(Eger.Domain.Entities.GradingSettings settings, CancellationToken ct = default);
 }

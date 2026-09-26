@@ -3,8 +3,10 @@ import Protected from "./components/Protected";
 import { AuthProvider, pathForRole, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import AdminDashboard from "./pages/AdminDashboard";
+import AtRiskPage from "./pages/AtRiskPage";
 import LoginPage from "./pages/LoginPage";
 import ProfessorDashboard from "./pages/ProfessorDashboard";
+import StudentCardPage from "./pages/StudentCardPage";
 import StudentDashboard from "./pages/StudentDashboard";
 
 function HomeRedirect() {
@@ -32,10 +34,42 @@ export default function App() {
               }
             />
             <Route
+              path="/admin/students/:studentId"
+              element={
+                <Protected role="Admin">
+                  <StudentCardPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/admin/at-risk"
+              element={
+                <Protected role="Admin">
+                  <AtRiskPage />
+                </Protected>
+              }
+            />
+            <Route
               path="/professor"
               element={
                 <Protected role="Professor">
                   <ProfessorDashboard />
+                </Protected>
+              }
+            />
+            <Route
+              path="/professor/students/:studentId"
+              element={
+                <Protected role="Professor">
+                  <StudentCardPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/professor/at-risk"
+              element={
+                <Protected role="Professor">
+                  <AtRiskPage />
                 </Protected>
               }
             />

@@ -271,6 +271,9 @@ public class GradeRepository : IGradeRepository
     public Task DeleteByStudentAsync(string studentId, CancellationToken ct = default) =>
         _context.Grades.DeleteManyAsync(x => x.StudentId == studentId, ct);
 
+    public Task DeleteAllAsync(CancellationToken ct = default) =>
+        _context.Grades.DeleteManyAsync(Builders<Grade>.Filter.Empty, ct);
+
     public Task<long> CountAsync(CancellationToken ct = default) =>
         _context.Grades.CountDocumentsAsync(Builders<Grade>.Filter.Empty, cancellationToken: ct);
 
@@ -284,4 +287,34 @@ public class GradeRepository : IGradeRepository
                 Builders<Grade>.IndexKeys.Ascending(x => x.SubjectId),
                 new CreateIndexOptions { Name = "ix_grades_subjectId" })
         ], ct);
+}
+
+public class GradingSettingsRepository : IGradingSettingsRepository
+{
+    private readonly MongoContext _context;
+
+    public GradingSettingsRepository(MongoContext context) => _context = context;
+
+    public async Task<GradingSettings> GetAsync(CancellationToken ct = default)
+    {
+        var existing = await _context.GradingSettings
+            .Find(item => item.Id == GradingSettings.SingletonId)
+            .FirstOrDefaultAsync(ct);
+        if (existing is not null)
+            return existing;
+
+        var created = new GradingSettings();
+        await _context.GradingSettings.InsertOneAsync(created, cancellationToken: ct);
+        return created;
+    }
+
+    public Task UpdateAsync(GradingSettings settings, CancellationToken ct = default)
+    {
+        settings.Id = GradingSettings.SingletonId;
+        return _context.GradingSettings.ReplaceOneAsync(
+            item => item.Id == GradingSettings.SingletonId,
+            settings,
+            new ReplaceOptions { IsUpsert = true },
+            ct);
+    }
 }

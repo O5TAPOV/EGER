@@ -13,6 +13,8 @@ public static class DependencyInjection
         services.AddScoped<SubjectService>();
         services.AddScoped<GradeService>();
         services.AddScoped<AnalyticsService>();
+        services.AddScoped<GradingSettingsService>();
+        services.AddScoped<AcademicService>();
         services.AddScoped<SeedService>();
         services.AddScoped<AdminBootstrap>();
         return services;
