@@ -1,0 +1,103 @@
+services:
+  eger-mongo:
+    image: mongo:7.0
+    container_name: eger-mongo
+    restart: unless-stopped
+    networks:
+      - eger-net
+    volumes:
+      - eger-mongo-data:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+
+  eger-redis:
+    image: redis:alpine
+    container_name: eger-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - eger-net
+    volumes:
+      - eger-redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 8
+      start_period: 5s
+
+  eger-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: eger-backend
+    container_name: eger-backend
+    restart: unless-stopped
+    networks:
+      - eger-net
+    depends_on:
+      eger-mongo:
+        condition: service_healthy
+      eger-redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Mongo__ConnectionString: mongodb://eger-mongo:27017
+      Mongo__Database: EgerDb
+      Redis__ConnectionString: eger-redis:6379,abortConnect=false
+      Jwt__Secret: ${JWT_SECRET:-eger-dev-only-change-me-please-32b!}
+      Jwt__Issuer: eger
+      Jwt__Audience: eger-client
+      Telegram__BotToken: ${TELEGRAM_BOT_TOKEN:-}
+      Cors__Origins: http://localhost:8080,http://localhost:5173
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-admin@eger.ua}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-Admin123!}
+    ports:
+      - "5080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
+
+  eger-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    image: eger-frontend
+    container_name: eger-frontend
+    restart: unless-stopped
+    networks:
+      - eger-net
+    depends_on:
+      eger-backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+networks:
+  eger-net:
+    name: eger-net
+    driver: bridge
+
+volumes:
+  eger-mongo-data:
+  eger-redis-data:
