@@ -25,4 +25,15 @@ public class JournalSheet
     public int Semester { get; set; } = 5;
 
     public bool Finalized { get; set; }
+
+    public List<string> HiddenStudentIds { get; set; } = [];
+
+    public List<SheetLegend> Legend { get; set; } = [];
+}
+
+public class SheetLegend
+{
+    public string Code { get; set; } = "";
+
+    public string Text { get; set; } = "";
 }

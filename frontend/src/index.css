@@ -4,6 +4,7 @@
 
 body {
   @apply bg-eger-bg font-sans text-stone-100 antialiased;
+  color-scheme: dark;
 }
 
 @layer components {
@@ -63,12 +64,58 @@ body {
   }
 }
 
+.dark-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  max-height: 16rem;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid #234536;
+  border-radius: 10px;
+  background: #10241c;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.dark-menu-option {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e7e5e4;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  padding: 8px 10px;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.dark-menu-option:hover,
+.dark-menu-option:focus {
+  background: #1b5c3c;
+  outline: none;
+}
+
+.dark-menu-option-active {
+  color: #e3b15a;
+}
+
 .sheet-scroll {
   --num: 46px;
   --name: 220px;
   --row1: 32px;
-  --row2: 48px;
+  --row2: 108px;
+  width: 100%;
+  max-width: 100%;
   overflow: auto;
+  overscroll-behavior-x: contain;
   max-height: min(75vh, 760px);
   border: 1px solid #234536;
   border-radius: 12px;
@@ -170,7 +217,9 @@ body {
   left: var(--num);
   width: var(--name);
   min-width: var(--name);
+  max-width: var(--name);
   text-align: left;
+  white-space: normal;
   box-shadow: 1px 0 0 #234536;
 }
 
@@ -182,16 +231,77 @@ body {
 }
 
 .sheet-grid .lesson-col {
-  width: 52px;
-  min-width: 52px;
-  padding: 2px;
+  width: 92px;
+  min-width: 92px;
+  padding: 2px 4px;
 }
 
-.sheet-grid .lesson-date {
+.sheet-grid .lesson-no {
   display: block;
   font-size: 10px;
-  font-weight: 400;
+  font-weight: 500;
   color: #a8a29e;
+}
+
+.sheet-grid .lesson-date,
+.sheet-grid .sheet-date-button {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #e7e5e4;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0;
+}
+
+.sheet-grid .sheet-date-button {
+  cursor: pointer;
+}
+
+.sheet-grid .sheet-date-button:hover {
+  color: #e3b15a;
+}
+
+.sheet-grid .sheet-date {
+  width: 100%;
+  margin-top: 2px;
+  border: 1px solid #234536;
+  border-radius: 6px;
+  background: #0d1c16;
+  color: #e7e5e4;
+  color-scheme: dark;
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 2px;
+}
+
+.sheet-grid .sheet-col-delete,
+.sheet-row-delete {
+  border: 0;
+  background: transparent;
+  color: #a8a29e;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sheet-grid .sheet-col-delete {
+  font-size: 14px;
+}
+
+.sheet-row-delete {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.sheet-grid .sheet-col-delete:hover,
+.sheet-row-delete:hover {
+  color: #fca5a5;
 }
 
 .sheet-grid .sum-col {

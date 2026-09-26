@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, errorText, todayInput } from "../api/client";
+import DarkSelect from "./DarkSelect";
 import { Field } from "./Modal";
 import { useToast } from "../context/ToastContext";
+
+const COLUMN_KINDS = [
+  { value: "Лекція", label: "Лекція" },
+  { value: "Практична", label: "Практична" },
+  { value: "Лабораторна", label: "Лабораторна" },
+  { value: "Контроль", label: "Контроль" },
+];
 
 function parsedMark(mark) {
   if (mark == null || String(mark).trim() === "") return { empty: true, absent: false, points: null };
@@ -135,8 +143,8 @@ function SheetCell({ display, allowsAbsence, readOnly, onCommit }) {
   );
 }
 
-function findCell(cells, column, index) {
-  return cells?.find((cell) => cell.sessionId === column.id) ?? cells?.[index] ?? { display: "", points: null, absent: false };
+function findCell(cells, column) {
+  return cells?.find((cell) => cell.sessionId === column.id) ?? { display: "", points: null, absent: false };
 }
 
 export default function Gradebook({ subjectId, group, studentId, linkBase, allowColumn = false }) {
@@ -147,8 +155,8 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
   const [kind, setKind] = useState("Лекція");
   const [columnDate, setColumnDate] = useState(todayInput());
   const [columnMax, setColumnMax] = useState("2");
-  const [code, setCode] = useState("");
   const [legend, setLegend] = useState("");
+  const [legendDraft, setLegendDraft] = useState([]);
   const [busy, setBusy] = useState(false);
   const requestRef = useRef(0);
 
@@ -170,6 +178,15 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
       if (requestRef.current === requestId) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!register) return;
+    setLegendDraft((register.legend || []).map((item) => ({
+      previousCode: item.code,
+      code: item.code,
+      text: item.text,
+    })));
+  }, [register]);
 
   useEffect(() => {
     setBlocked("");
@@ -256,15 +273,89 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
         kind,
         maxPoints: Number(columnMax),
         date: kind === "Контроль" || !columnDate ? null : new Date(`${columnDate}T00:00:00Z`).toISOString(),
-        code: kind === "Контроль" ? code : null,
         legend: kind === "Контроль" ? legend : null,
       });
       setBlocked("");
-      setCode("");
       setLegend("");
       await load();
     } catch (error) {
       const text = errorText(error, "Не вдалося додати колонку");
+      setBlocked(text);
+      push(text, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeDate = async (sessionId, value) => {
+    if (!value) return;
+    setBusy(true);
+    try {
+      await api.put(`/academic/register/columns/${sessionId}/date`, {
+        date: new Date(`${value}T00:00:00Z`).toISOString(),
+      });
+      await load();
+    } catch (error) {
+      push(errorText(error, "Не вдалося змінити дату"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteColumn = async (column) => {
+    const label = column.dateLabel ? `${column.number} (${column.dateLabel})` : (column.code || column.number);
+    if (!window.confirm(`Видалити колонку ${label} з відомості? Бали в ній буде знято.`)) return;
+    setBusy(true);
+    try {
+      await api.delete(`/academic/register/columns/${column.id}`);
+      await load();
+    } catch (error) {
+      push(errorText(error, "Не вдалося видалити колонку"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const hideStudent = async (row) => {
+    if (!register) return;
+    if (!window.confirm(`Прибрати ${row.fullName} з цієї відомості? Обліковий запис студента не видаляється.`)) return;
+    setBusy(true);
+    try {
+      await api.delete("/academic/register/rows", {
+        params: { subjectId: register.subjectId, group: register.group, studentId: row.studentId },
+      });
+      await load();
+    } catch (error) {
+      push(errorText(error, "Не вдалося прибрати рядок"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveLegend = async () => {
+    if (!register) return;
+    if (legendDraft.some((item) => !item.code.trim())) {
+      const text = "Вкажіть код позначення.";
+      setBlocked(text);
+      push(text, "error");
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.put("/academic/register/legend", {
+        subjectId: register.subjectId,
+        group: register.group,
+        entries: legendDraft.map((item) => ({
+          previousCode: item.previousCode || null,
+          code: item.code.trim(),
+          text: item.text.trim(),
+        })),
+      });
+      setBlocked("");
+      await load();
+      push("Умовні позначення збережено");
+    } catch (error) {
+      const text = errorText(error, "Не вдалося зберегти позначення");
       setBlocked(text);
       push(text, "error");
     } finally {
@@ -278,16 +369,39 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
 
   const lectures = register.lectures || [];
   const works = register.works || [];
+  const labs = works.filter((column) => column.kind === "Лабораторна");
+  const practicals = works.filter((column) => column.kind !== "Лабораторна");
   const controls = register.controls || [];
-  const workKind = register.workTitle === "Практичні" ? "Практична" : "Лабораторна";
   const storedWarnings = [...new Set(register.rows.flatMap((row) => row.warnings || []))];
   const editable = register.canEdit && !busy;
   const columnCount = 2 + lectures.length + works.length + controls.length + 5;
 
   const lessonHead = (column) => (
     <th key={column.id} className="lesson-col" title={column.legend || undefined}>
-      <span>{column.code || column.number}</span>
-      {column.dateLabel ? <span className="lesson-date">{column.dateLabel}</span> : null}
+      <span className="lesson-no">{column.code || column.number}</span>
+      {column.dateLabel ? (
+        editable ? (
+          <button type="button" className="sheet-date-button" onClick={(event) => event.currentTarget.nextElementSibling?.showPicker?.() || event.currentTarget.nextElementSibling?.focus()}>
+            {column.dateLabel}
+          </button>
+        ) : (
+          <span className="lesson-date">{column.dateLabel}</span>
+        )
+      ) : null}
+      {editable && column.dateValue ? (
+        <input
+          className="sheet-date"
+          type="date"
+          aria-label={`Дата колонки ${column.number}`}
+          value={column.dateValue}
+          onChange={(event) => changeDate(column.id, event.target.value)}
+        />
+      ) : null}
+      {editable && (
+        <button type="button" className="sheet-col-delete" aria-label="Видалити колонку" onClick={() => deleteColumn(column)}>
+          ×
+        </button>
+      )}
     </th>
   );
 
@@ -329,13 +443,15 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                 <th className="col-num" rowSpan={2}>№ з/п</th>
                 <th className="col-name" rowSpan={2}>Прізвище, ім&apos;я, по батькові студента</th>
                 {lectures.length > 0 && <th className="group-col" colSpan={lectures.length}>Лекції</th>}
-                {works.length > 0 && <th className="group-col" colSpan={works.length}>{register.workTitle}</th>}
+                {labs.length > 0 && <th className="group-col" colSpan={labs.length}>Лабораторні</th>}
+                {practicals.length > 0 && <th className="group-col" colSpan={practicals.length}>Практичні</th>}
                 {controls.length > 0 && <th className="group-col" colSpan={controls.length}>Контроль</th>}
                 <th className="group-col" colSpan={5}>Підсумок</th>
               </tr>
               <tr>
                 {lectures.map(lessonHead)}
-                {works.map(lessonHead)}
+                {labs.map(lessonHead)}
+                {practicals.map(lessonHead)}
                 {controls.map(lessonHead)}
                 <th className="sum-col">Результати поточного контролю</th>
                 <th className="sum-col">Залік / Екзамен</th>
@@ -346,7 +462,8 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
               <tr className="max-row">
                 <th className="max-label" colSpan={2}>Максимальна кількість балів</th>
                 {lectures.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
-                {works.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
+                {labs.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
+                {practicals.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
                 {controls.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
                 <th>{register.plannedCurrentMax}</th>
                 <th>{register.finalMax}</th>
@@ -370,9 +487,14 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                       ) : (
                         row.fullName
                       )}
+                      {editable && (
+                        <button type="button" className="sheet-row-delete" onClick={() => hideStudent(row)}>
+                          Прибрати з відомості
+                        </button>
+                      )}
                     </td>
-                    {lectures.map((column, index) => {
-                      const cell = findCell(row.lectures, column, index);
+                    {lectures.map((column) => {
+                      const cell = findCell(row.lectures, column);
                       return (
                         <td key={column.id}>
                           <SheetCell
@@ -384,8 +506,8 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                         </td>
                       );
                     })}
-                    {works.map((column, index) => {
-                      const cell = findCell(row.works, column, index);
+                    {labs.map((column) => {
+                      const cell = findCell(row.works, column);
                       return (
                         <td key={column.id}>
                           <SheetCell
@@ -396,8 +518,20 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                         </td>
                       );
                     })}
-                    {controls.map((column, index) => {
-                      const cell = findCell(row.controls, column, index);
+                    {practicals.map((column) => {
+                      const cell = findCell(row.works, column);
+                      return (
+                        <td key={column.id}>
+                          <SheetCell
+                            display={cell.display}
+                            readOnly={!editable}
+                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: false })}
+                          />
+                        </td>
+                      );
+                    })}
+                    {controls.map((column) => {
+                      const cell = findCell(row.controls, column);
                       return (
                         <td key={column.id}>
                           <SheetCell
@@ -436,16 +570,59 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
           </table>
       </div>
 
-      {register.legend?.length > 0 && (
-        <section className="sheet-legend">
-          <h3>Умовні позначення</h3>
+      <section className="sheet-legend">
+        <h3>Умовні позначення</h3>
+        {editable ? (
+          <div className="space-y-2">
+            {legendDraft.map((item, index) => (
+              <div key={`${item.previousCode}-${index}`} className="flex flex-wrap items-center gap-2">
+                <input
+                  className="field w-28"
+                  aria-label="Код позначення"
+                  value={item.code}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setLegendDraft((current) => current.map((entry, entryIndex) => (
+                      entryIndex === index ? { ...entry, code: next } : entry
+                    )));
+                  }}
+                />
+                <input
+                  className="field min-w-64 flex-1"
+                  aria-label="Пояснення позначення"
+                  value={item.text}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setLegendDraft((current) => current.map((entry, entryIndex) => (
+                      entryIndex === index ? { ...entry, text: next } : entry
+                    )));
+                  }}
+                />
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setLegendDraft((current) => [...current, { previousCode: "", code: "", text: "" }])}
+              >
+                Додати позначення
+              </button>
+              <button type="button" className="btn-primary" disabled={busy} onClick={saveLegend}>
+                Зберегти позначення
+              </button>
+            </div>
+          </div>
+        ) : legendDraft.length === 0 ? (
+          <p>Позначень ще немає.</p>
+        ) : (
           <ul>
-            {register.legend.map((item) => (
+            {legendDraft.map((item) => (
               <li key={`${item.code}-${item.text}`}><b>{item.code}</b> — {item.text}</li>
             ))}
           </ul>
-        </section>
-      )}
+        )}
+      </section>
 
       <label className="sheet-finalized">
         <input
@@ -460,21 +637,17 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
       {allowColumn && register.canEdit && (
         <form className="flex flex-wrap items-end gap-3" onSubmit={addColumn}>
           <Field label="Колонка">
-            <select
-              className="field w-48"
+            <DarkSelect
+              className="w-48"
               value={kind}
-              onChange={(event) => {
-                const next = event.target.value;
+              onChange={(next) => {
                 setKind(next);
                 if (next === "Лекція") setColumnMax("2");
                 else if (next === "Контроль") setColumnMax("10");
                 else setColumnMax("4");
               }}
-            >
-              <option value="Лекція">Лекція</option>
-              <option value={workKind}>{register.workTitle || "Лабораторні"}</option>
-              <option value="Контроль">Контроль</option>
-            </select>
+              options={COLUMN_KINDS}
+            />
           </Field>
           {kind !== "Контроль" && (
             <Field label="Дата">
@@ -482,14 +655,9 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
             </Field>
           )}
           {kind === "Контроль" && (
-            <>
-              <Field label="Код">
-                <input className="field w-28" value={code} onChange={(event) => setCode(event.target.value)} placeholder="КЛ" />
-              </Field>
-              <Field label="Пояснення">
-                <input className="field w-64" value={legend} onChange={(event) => setLegend(event.target.value)} />
-              </Field>
-            </>
+            <Field label="Пояснення">
+              <input className="field w-64" value={legend} onChange={(event) => setLegend(event.target.value)} placeholder="Наступний вільний код C1–C6" />
+            </Field>
           )}
           <Field label="Максимум">
             <input className="field w-24" type="number" min="1" max="100" required value={columnMax} onChange={(event) => setColumnMax(event.target.value)} />

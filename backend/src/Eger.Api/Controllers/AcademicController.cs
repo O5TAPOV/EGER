@@ -77,6 +77,38 @@ public class AcademicController : ControllerBase
         return Ok(await _register.SetCellAsync(HttpActor.Current(User), request, ct));
     }
 
+    [HttpPut("register/columns/{sessionId}/date")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> UpdateColumnDate(string sessionId, [FromBody] UpdateColumnDateRequest request, CancellationToken ct)
+    {
+        return Ok(await _register.UpdateColumnDateAsync(HttpActor.Current(User), sessionId, request, ct));
+    }
+
+    [HttpDelete("register/columns/{sessionId}")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> DeleteColumn(string sessionId, CancellationToken ct)
+    {
+        return Ok(await _register.DeleteColumnAsync(HttpActor.Current(User), sessionId, ct));
+    }
+
+    [HttpDelete("register/rows")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> HideRow(
+        [FromQuery] string subjectId,
+        [FromQuery] string group,
+        [FromQuery] string studentId,
+        CancellationToken ct)
+    {
+        return Ok(await _register.HideStudentAsync(HttpActor.Current(User), subjectId, group, studentId, ct));
+    }
+
+    [HttpPut("register/legend")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> UpdateLegend([FromBody] UpdateLegendRequest request, CancellationToken ct)
+    {
+        return Ok(await _register.UpdateLegendAsync(HttpActor.Current(User), request, ct));
+    }
+
     [HttpPut("register/sheet")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
     public async Task<ActionResult<RegisterResponse>> SetSheet([FromBody] UpdateSheetRequest request, CancellationToken ct)

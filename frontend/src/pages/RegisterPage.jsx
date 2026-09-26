@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { api, errorText } from "../api/client";
+import DarkSelect from "../components/DarkSelect";
 import Gradebook from "../components/Gradebook";
 import Layout from "../components/Layout";
 import { Field } from "../components/Modal";
+import TwoFactorSettings from "../components/TwoFactorSettings";
 import { useToast } from "../context/ToastContext";
 
-export default function RegisterPage({ subjectsPath, linkBase }) {
+export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = false }) {
   const { push } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -37,26 +39,27 @@ export default function RegisterPage({ subjectsPath, linkBase }) {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-3">
             <Field label="Дисципліна">
-              <select className="field min-w-64" value={subjectId} onChange={(event) => setSubjectId(event.target.value)}>
-                {subjects.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.title}
-                  </option>
-                ))}
-              </select>
+              <DarkSelect
+                className="min-w-64"
+                value={subjectId}
+                onChange={setSubjectId}
+                placeholder="Оберіть дисципліну"
+                options={subjects.map((subject) => ({ value: subject.id, label: subject.title }))}
+              />
             </Field>
             <Field label="Група">
-              <select className="field min-w-40" value={group} onChange={(event) => setGroup(event.target.value)}>
-                {groups.length === 0 && <option value="">Груп ще немає</option>}
-                {groups.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+              <DarkSelect
+                className="min-w-40"
+                value={group}
+                onChange={setGroup}
+                placeholder={groups.length === 0 ? "Груп ще немає" : "Оберіть групу"}
+                disabled={groups.length === 0}
+                options={groups.map((item) => ({ value: item, label: item }))}
+              />
             </Field>
           </div>
           {subjectId && group && <Gradebook subjectId={subjectId} group={group} linkBase={linkBase} allowColumn />}
+          {showTwoFactor && <TwoFactorSettings />}
         </div>
       )}
     </Layout>

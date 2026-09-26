@@ -65,7 +65,7 @@ export default function Layout({ title, children }) {
           </button>
         </div>
       </aside>
-      <main className="px-4 py-6 md:px-8">
+      <main className="min-w-0 px-4 py-6 md:px-8">
         <h1 className="mb-6 text-2xl font-semibold text-stone-50">{title}</h1>
         {children}
       </main>

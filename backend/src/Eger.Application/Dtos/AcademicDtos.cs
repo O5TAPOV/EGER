@@ -163,6 +163,7 @@ public class RegisterColumnResponse
     public int Number { get; set; }
     public string Code { get; set; } = "";
     public string DateLabel { get; set; } = "";
+    public string DateValue { get; set; } = "";
     public int MaxPoints { get; set; }
     public string Legend { get; set; } = "";
     public bool AllowsAbsence { get; set; }
@@ -274,4 +275,30 @@ public class UpdateSheetRequest
     public string Group { get; set; } = "";
 
     public bool Finalized { get; set; }
+}
+
+public class UpdateColumnDateRequest
+{
+    [Required(ErrorMessage = "Вкажіть дату заняття")]
+    public DateTime Date { get; set; }
+}
+
+public class LegendEditEntry
+{
+    public string? PreviousCode { get; set; }
+
+    public string Code { get; set; } = "";
+
+    public string Text { get; set; } = "";
+}
+
+public class UpdateLegendRequest
+{
+    [Required(ErrorMessage = "Дисципліна обов'язкова")]
+    public string SubjectId { get; set; } = "";
+
+    [Required(ErrorMessage = "Група обов'язкова")]
+    public string Group { get; set; } = "";
+
+    public List<LegendEditEntry> Entries { get; set; } = [];
 }

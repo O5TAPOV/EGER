@@ -52,7 +52,8 @@ public class RegisterService
 
         await AttachOrphansAsync(subject.Id, sheetGroup, ct);
         await EnsureSheetAsync(subject, sheetGroup, ct);
-        return await BuildAsync(subject, sheetGroup, students, canEdit, ct);
+        var omitHidden = actor.Role != Roles.Student && string.IsNullOrWhiteSpace(studentId);
+        return await BuildAsync(subject, sheetGroup, students, canEdit, omitHidden, ct);
     }
 
     public async Task<RegisterResponse> SetFinalizedAsync(Actor actor, UpdateSheetRequest request, CancellationToken ct = default)
@@ -68,7 +69,7 @@ public class RegisterService
         var students = (await _students.GetByGroupAsync(group, ct))
             .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
             .ToList();
-        return await BuildAsync(subject, group, students, canEdit: true, ct);
+        return await BuildAsync(subject, group, students, canEdit: true, omitHidden: true, ct);
     }
 
     public async Task<RegisterResponse> AddColumnAsync(Actor actor, AddColumnRequest request, CancellationToken ct = default)
@@ -90,8 +91,9 @@ public class RegisterService
 
         var sessions = await _sessions.GetBySubjectGroupAsync(subject.Id, group, ct);
         var number = sessions.Where(session => ResolveKind(session) == kind).Select(session => session.Number).DefaultIfEmpty(0).Max() + 1;
-        var code = kind == JournalColumns.Control
-            ? (string.IsNullOrWhiteSpace(request.Code) ? $"К{number}" : request.Code.Trim())
+        var code = kind == JournalColumns.Control ? NextControlCode(sessions) : "";
+        var legend = kind == JournalColumns.Control
+            ? (string.IsNullOrWhiteSpace(request.Legend) ? code : request.Legend.Trim())
             : "";
         await _sessions.CreateAsync(new ClassSession
         {
@@ -102,9 +104,17 @@ public class RegisterService
             ColumnKind = kind,
             Number = number,
             Code = code,
-            Legend = string.IsNullOrWhiteSpace(request.Legend) ? request.Code?.Trim() : request.Legend.Trim(),
+            Legend = legend,
             MaxPoints = request.MaxPoints
         }, ct);
+        if (kind == JournalColumns.Control)
+        {
+            var sheet = await EnsureSheetAsync(subject, group, ct);
+            sheet.Legend ??= [];
+            if (!sheet.Legend.Any(item => string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase)))
+                sheet.Legend.Add(new SheetLegend { Code = code, Text = legend });
+            await _sheets.UpdateAsync(sheet, ct);
+        }
 
         if (JournalColumns.IsWork(kind) && !sessions.Any(item => JournalColumns.IsWork(ResolveKind(item))))
         {
@@ -116,7 +126,118 @@ public class RegisterService
         var students = (await _students.GetByGroupAsync(group, ct))
             .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
             .ToList();
-        return await BuildAsync(subject, group, students, canEdit: true, ct);
+        return await BuildAsync(subject, group, students, canEdit: true, omitHidden: true, ct);
+    }
+
+    public async Task<RegisterResponse> UpdateColumnDateAsync(Actor actor, string sessionId, UpdateColumnDateRequest request, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        Ids.Ensure(sessionId);
+        var session = await _sessions.GetByIdAsync(sessionId, ct)
+            ?? throw new AppException(404, "Колонку не знайдено");
+        var kind = ResolveKind(session);
+        if (kind is not (JournalColumns.Lecture or JournalColumns.Laboratory or JournalColumns.Practical))
+            throw new AppException(400, "Дату можна змінити лише для лекції, практичної або лабораторної.");
+        var subject = await RequireSubjectAsync(session.SubjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        session.Date = Dates.NormalizeUtc(request.Date);
+        await _sessions.UpdateAsync(session, ct);
+        var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
+        foreach (var grade in grades.Where(grade => grade.SessionId == session.Id))
+        {
+            grade.Date = session.Date;
+            await _grades.UpdateAsync(grade, ct);
+        }
+
+        return await BuildGroupAsync(subject, session.Group, ct);
+    }
+
+    public async Task<RegisterResponse> DeleteColumnAsync(Actor actor, string sessionId, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        Ids.Ensure(sessionId);
+        var session = await _sessions.GetByIdAsync(sessionId, ct)
+            ?? throw new AppException(404, "Колонку не знайдено");
+        var kind = ResolveKind(session);
+        if (kind is not (JournalColumns.Lecture or JournalColumns.Laboratory or JournalColumns.Practical or JournalColumns.Control))
+            throw new AppException(400, "Цю колонку не можна видалити.");
+        var subject = await RequireSubjectAsync(session.SubjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        await _grades.DeleteBySessionAsync(session.Id, ct);
+        await _sessions.DeleteAsync(session.Id, ct);
+        if (kind == JournalColumns.Control && !string.IsNullOrWhiteSpace(session.Code))
+        {
+            var sheet = await EnsureSheetAsync(subject, session.Group, ct);
+            sheet.Legend ??= [];
+            var removed = sheet.Legend.RemoveAll(item => string.Equals(item.Code, session.Code, StringComparison.OrdinalIgnoreCase));
+            if (removed > 0)
+                await _sheets.UpdateAsync(sheet, ct);
+        }
+
+        return await BuildGroupAsync(subject, session.Group, ct);
+    }
+
+    public async Task<RegisterResponse> HideStudentAsync(Actor actor, string subjectId, string group, string studentId, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        Ids.Ensure(studentId);
+        var subject = await RequireSubjectAsync(subjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        var student = await _students.GetByIdAsync(studentId, ct)
+            ?? throw new AppException(404, "Студента не знайдено");
+        group = group.Trim();
+        if (!string.Equals(student.Group, group, StringComparison.Ordinal))
+            throw new AppException(400, "Студент не належить до цієї групи");
+        var sheet = await EnsureSheetAsync(subject, group, ct);
+        sheet.HiddenStudentIds ??= [];
+        if (!sheet.HiddenStudentIds.Contains(student.Id))
+        {
+            sheet.HiddenStudentIds.Add(student.Id);
+            await _sheets.UpdateAsync(sheet, ct);
+        }
+
+        return await BuildGroupAsync(subject, group, ct);
+    }
+
+    public async Task<RegisterResponse> UpdateLegendAsync(Actor actor, UpdateLegendRequest request, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        var subject = await RequireSubjectAsync(request.SubjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        var group = request.Group.Trim();
+        var sheet = await EnsureSheetAsync(subject, group, ct);
+        var sessions = (await _sessions.GetBySubjectGroupAsync(subject.Id, group, ct))
+            .Where(session => ResolveKind(session) == JournalColumns.Control)
+            .ToList();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var stored = new List<SheetLegend>();
+        foreach (var entry in request.Entries ?? [])
+        {
+            var code = entry.Code?.Trim() ?? "";
+            var previous = entry.PreviousCode?.Trim() ?? "";
+            var text = entry.Text?.Trim() ?? "";
+            if (code.Length == 0)
+                throw new AppException(400, "Вкажіть код позначення.");
+            if (!seen.Add(code))
+                throw new AppException(400, $"Код «{code}» повторено.");
+            var matchCode = previous.Length > 0 ? previous : code;
+            foreach (var session in sessions.Where(session => string.Equals(session.Code, matchCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                session.Code = code;
+                session.Legend = text;
+                await _sessions.UpdateAsync(session, ct);
+            }
+
+            stored.Add(new SheetLegend { Code = code, Text = text });
+        }
+
+        sheet.Legend = stored;
+        await _sheets.UpdateAsync(sheet, ct);
+        return await BuildGroupAsync(subject, group, ct);
     }
 
     public async Task<RegisterResponse> SetCellAsync(Actor actor, SetCellRequest request, CancellationToken ct = default)
@@ -285,7 +406,7 @@ public class RegisterService
         var students = (await _students.GetByGroupAsync(group, ct))
             .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
             .ToList();
-        return await BuildAsync(subject, group, students, canEdit: true, ct);
+        return await BuildAsync(subject, group, students, canEdit: true, omitHidden: true, ct);
     }
 
     private async Task SaveFinalAsync(Subject subject, Student student, string professorId, string? mark, CancellationToken ct)
@@ -380,6 +501,7 @@ public class RegisterService
         string group,
         IReadOnlyList<Student> students,
         bool canEdit,
+        bool omitHidden,
         CancellationToken ct)
     {
         var settings = await _settings.GetAsync(ct);
@@ -404,10 +526,13 @@ public class RegisterService
             : Math.Min(plannedSum, settings.CurrentMax);
 
         var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
+        var hidden = sheet.HiddenStudentIds ?? [];
         var rows = new List<RegisterRowResponse>();
         var number = 1;
         foreach (var student in students)
         {
+            if (omitHidden && hidden.Contains(student.Id))
+                continue;
             var own = grades.Where(grade => grade.StudentId == student.Id).ToList();
             var standing = GradeBook.Evaluate(own, settings);
             var warnings = PointGuard.Describe(student.FullName, standing, settings);
@@ -472,16 +597,54 @@ public class RegisterService
             Lectures = lectures,
             Works = works,
             Controls = controls,
-            Legend = controls
-                .Where(column => !string.IsNullOrWhiteSpace(column.Code))
-                .Select(column => new LegendEntryResponse
-                {
-                    Code = column.Code,
-                    Text = string.IsNullOrWhiteSpace(column.Legend) ? column.Code : column.Legend
-                })
-                .ToList(),
+            Legend = MergeLegend(sheet, controls),
             Rows = rows
         };
+    }
+
+    private static List<LegendEntryResponse> MergeLegend(JournalSheet sheet, IReadOnlyList<RegisterColumnResponse> controls)
+    {
+        var result = new List<LegendEntryResponse>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in sheet.Legend ?? [])
+        {
+            var code = item.Code?.Trim() ?? "";
+            if (code.Length == 0 || !seen.Add(code))
+                continue;
+            var text = item.Text?.Trim() ?? "";
+            if (text.Length == 0)
+                text = controls.FirstOrDefault(column => string.Equals(column.Code, code, StringComparison.OrdinalIgnoreCase))?.Legend ?? code;
+            result.Add(new LegendEntryResponse { Code = code, Text = text });
+        }
+
+        foreach (var column in controls)
+        {
+            if (string.IsNullOrWhiteSpace(column.Code) || !seen.Add(column.Code))
+                continue;
+            result.Add(new LegendEntryResponse
+            {
+                Code = column.Code,
+                Text = string.IsNullOrWhiteSpace(column.Legend) ? column.Code : column.Legend
+            });
+        }
+
+        return result;
+    }
+
+    private static string NextControlCode(IEnumerable<ClassSession> sessions)
+    {
+        var used = sessions
+            .Where(session => ResolveKind(session) == JournalColumns.Control)
+            .Select(session => session.Code?.Trim().ToUpperInvariant())
+            .ToHashSet();
+        for (var index = 1; index <= 6; index++)
+        {
+            var code = $"C{index}";
+            if (!used.Contains(code))
+                return code;
+        }
+
+        throw new AppException(400, "Усі коди контролю C1–C6 вже використано.");
     }
 
     private static string ResolveKind(ClassSession session) =>
@@ -522,7 +685,8 @@ public class RegisterService
                 Kind = kind,
                 Number = number,
                 Code = code,
-                DateLabel = dated ? $"{session.Date.Day:00}.{session.Date.Month:00}" : "",
+                DateLabel = dated ? $"{session.Date.Day:00}.{session.Date.Month:00}.{session.Date.Year}" : "",
+                DateValue = dated ? session.Date.ToString("yyyy-MM-dd") : "",
                 MaxPoints = session.MaxPoints,
                 Legend = string.IsNullOrWhiteSpace(session.Legend)
                     ? kind == JournalColumns.Control ? session.GradeType : ""

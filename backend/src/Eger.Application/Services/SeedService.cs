@@ -7,7 +7,8 @@ namespace Eger.Application.Services;
 
 public class SeedService
 {
-    public const string DemoStudentName = "Остапов Антон";
+    public const string DemoStudentName = "Остапов Антон Юрійович";
+    private const string LegacyDemoStudentName = "Остапов Антон";
     public const string StudentPassword = "Student123!";
     public const string ProfessorPassword = "Professor123!";
 
@@ -43,15 +44,25 @@ public class SeedService
     public async Task<SeedResult> GenerateAsync(CancellationToken ct = default)
     {
         var existing = await _students.GetAllAsync(ct);
-        if (existing.Any(s => s.FullName == DemoStudentName))
+        var anton = existing.FirstOrDefault(student => student.FullName is DemoStudentName or LegacyDemoStudentName);
+        if (anton is not null)
         {
+            var renamed = anton.FullName != DemoStudentName;
+            if (renamed)
+            {
+                anton.FullName = DemoStudentName;
+                await _students.UpdateAsync(anton, ct);
+            }
+
             var grades = await _grades.GetAllAsync(ct);
             if (await HasOfficialSheetAsync(ct))
             {
                 return new SeedResult
                 {
                     AlreadySeeded = true,
-                    Message = "Демонстраційні дані вже було згенеровано раніше",
+                    Message = renamed
+                        ? "Ім'я демонстраційного студента оновлено: Остапов Антон Юрійович"
+                        : "Демонстраційні дані вже було згенеровано раніше",
                     Students = existing.Count,
                     Professors = (await _professors.GetAllAsync(ct)).Count,
                     Subjects = (await _subjects.GetAllAsync(ct)).Count,
@@ -380,6 +391,7 @@ public class SeedService
             ("ДЗ", "домашнє завдання з SQL", 10),
             ("КР1", "захист моделі бази даних", 10),
             ("КР2", "підсумкова практична робота", 10));
+        await RememberLegendAsync(subject, "КН-21", controls, ct);
         var count = 0;
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, lectures, [2, 2, 2, 2, 2, 2, 1, 2], ct);
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, labs, [4, 4, 4, 4, 4, 3], ct);
@@ -411,6 +423,7 @@ public class SeedService
         var controls = await AddControlsAsync(subject, "КН-21", ct,
             ("КЛ", "контрольна робота з алгоритмів", 10),
             ("ДЗ", "домашнє завдання зі структур даних", 10));
+        await RememberLegendAsync(subject, "КН-21", controls, ct);
         var count = 0;
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, lectures, [2, 2, 1, 2, 1, 2], ct);
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, practicals, [4, 3, 3, 2], ct);
@@ -434,6 +447,7 @@ public class SeedService
         var controls = await AddControlsAsync(subject, "КН-21", ct,
             ("КЛ", "контрольна робота з верстки", 8),
             ("ДЗ", "домашнє завдання з інтерфейсу", 8));
+        await RememberLegendAsync(subject, "КН-21", controls, ct);
         var count = 0;
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, lectures, [1, 1, 1, 1], ct);
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, labs, [2, 2, 2], ct);
@@ -445,6 +459,18 @@ public class SeedService
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, controls, [2, 2], ct);
         count += await WriteFinalAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, 8, GradeTypes.Credit, Day(2026, 1, 20), ct);
         return count;
+    }
+
+    private async Task RememberLegendAsync(Subject subject, string group, IReadOnlyList<ClassSession> controls, CancellationToken ct)
+    {
+        var sheet = await _sheets.GetBySubjectGroupAsync(subject.Id, group, ct);
+        if (sheet is null)
+            return;
+        sheet.Legend = controls
+            .Where(session => !string.IsNullOrWhiteSpace(session.Code))
+            .Select(session => new SheetLegend { Code = session.Code!, Text = session.Legend ?? "" })
+            .ToList();
+        await _sheets.UpdateAsync(sheet, ct);
     }
 
     private async Task PutSheetAsync(

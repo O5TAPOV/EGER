@@ -271,6 +271,9 @@ public class GradeRepository : IGradeRepository
     public Task DeleteByStudentAsync(string studentId, CancellationToken ct = default) =>
         _context.Grades.DeleteManyAsync(x => x.StudentId == studentId, ct);
 
+    public Task DeleteBySessionAsync(string sessionId, CancellationToken ct = default) =>
+        _context.Grades.DeleteManyAsync(x => x.SessionId == sessionId, ct);
+
     public Task DeleteAllAsync(CancellationToken ct = default) =>
         _context.Grades.DeleteManyAsync(Builders<Grade>.Filter.Empty, ct);
 
@@ -306,6 +309,12 @@ public class ClassSessionRepository : IClassSessionRepository
 
     public Task CreateAsync(ClassSession session, CancellationToken ct = default) =>
         UserRepository.InsertAsync(_context.ClassSessions, session, ct);
+
+    public Task UpdateAsync(ClassSession session, CancellationToken ct = default) =>
+        UserRepository.ReplaceAsync(_context.ClassSessions, session.Id, session, ct);
+
+    public Task DeleteAsync(string id, CancellationToken ct = default) =>
+        _context.ClassSessions.DeleteOneAsync(x => x.Id == id, ct);
 
     public Task DeleteAllAsync(CancellationToken ct = default) =>
         _context.ClassSessions.DeleteManyAsync(Builders<ClassSession>.Filter.Empty, ct);
