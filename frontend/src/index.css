@@ -63,74 +63,57 @@ body {
   }
 }
 
-.official-sheet {
-  background: #fff;
-  color: #111;
-  border: 1px solid #111;
-  padding: 14px 16px 18px;
-  font-family: "Times New Roman", Times, "Liberation Serif", serif;
-  font-size: 14px;
-  line-height: 1.35;
-}
-
-.sheet-title {
-  margin: 0 0 8px;
-  text-align: center;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.sheet-meta {
-  margin: 0;
-}
-
 .sheet-scroll {
+  --num: 46px;
+  --name: 220px;
+  --row1: 32px;
+  --row2: 48px;
   overflow: auto;
-  max-height: 75vh;
-  margin-top: 10px;
+  max-height: min(75vh, 760px);
+  border: 1px solid #234536;
+  border-radius: 12px;
+  background: #0c1a14;
 }
 
 .sheet-grid {
-  --num: 36px;
-  --name: 220px;
-  --row1: 32px;
-  --row2: 50px;
   border-collapse: separate;
   border-spacing: 0;
   width: max-content;
   min-width: 100%;
-  font-size: 11px;
-  line-height: 1.15;
+  font-size: 13px;
+  color: #e7e5e4;
 }
 
 .sheet-grid th,
 .sheet-grid td {
   box-sizing: border-box;
-  border-right: 1px solid #111;
-  border-bottom: 1px solid #111;
-  padding: 2px 3px;
-  background: #fff;
-  color: #111;
+  padding: 0 6px;
+  border-right: 1px solid #234536;
+  border-bottom: 1px solid #234536;
+  background: #10241c;
+  color: inherit;
   text-align: center;
   vertical-align: middle;
   font-weight: 400;
 }
 
-.sheet-grid thead tr:first-child th {
-  border-top: 1px solid #111;
+.sheet-grid tbody td {
+  height: 34px;
 }
 
-.sheet-grid .col-num,
-.sheet-grid .col-name,
-.sheet-grid .max-label,
-.sheet-grid tbody td:first-child {
-  border-left: 1px solid #111;
+.sheet-grid tbody tr:nth-child(even) td {
+  background: #163028;
 }
 
 .sheet-grid thead th {
   position: sticky;
   z-index: 4;
-  background: #fff;
+  height: auto;
+  background: #0d1c16;
+  color: #d6d3d1;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .sheet-grid thead tr:nth-child(1) th {
@@ -148,32 +131,39 @@ body {
 
 .sheet-grid thead tr.max-row th {
   top: calc(var(--row1) + var(--row2));
-  font-weight: 700;
+  height: 32px;
+  color: #a8a29e;
+  font-weight: 500;
 }
 
 .sheet-grid .col-num,
 .sheet-grid .col-name,
 .sheet-grid .max-label {
   position: sticky;
-  background: #fff;
 }
 
 .sheet-grid tbody .col-num,
 .sheet-grid tbody .col-name {
   z-index: 2;
+  background: #10241c;
+}
+
+.sheet-grid tbody tr:nth-child(even) .col-num,
+.sheet-grid tbody tr:nth-child(even) .col-name {
+  background: #163028;
 }
 
 .sheet-grid thead .col-num,
 .sheet-grid thead .col-name,
 .sheet-grid thead .max-label {
   z-index: 6;
+  background: #0d1c16;
 }
 
 .sheet-grid .col-num {
   left: 0;
   width: var(--num);
   min-width: var(--num);
-  max-width: var(--num);
 }
 
 .sheet-grid .col-name {
@@ -181,45 +171,41 @@ body {
   width: var(--name);
   min-width: var(--name);
   text-align: left;
-  padding-left: 6px;
-  box-shadow: 1px 0 0 #111;
+  box-shadow: 1px 0 0 #234536;
 }
 
 .sheet-grid .max-label {
   left: 0;
-  z-index: 6;
   min-width: calc(var(--num) + var(--name));
   text-align: left;
-  padding-left: 6px;
-  box-shadow: 1px 0 0 #111;
-}
-
-.sheet-grid .group-col,
-.sheet-grid .sum-col {
-  font-weight: 700;
+  box-shadow: 1px 0 0 #234536;
 }
 
 .sheet-grid .lesson-col {
-  width: 36px;
-  min-width: 36px;
-  padding: 1px 2px;
+  width: 52px;
+  min-width: 52px;
+  padding: 2px;
 }
 
 .sheet-grid .lesson-date {
   display: block;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
+  color: #a8a29e;
 }
 
 .sheet-grid .sum-col {
-  width: 84px;
-  min-width: 84px;
-  max-width: 96px;
+  width: 88px;
+  min-width: 88px;
   white-space: normal;
 }
 
 .sheet-grid a.sheet-name {
-  color: #111;
+  color: #e3b15a;
+  font-weight: 500;
+}
+
+.sheet-grid a.sheet-name:hover {
   text-decoration: underline;
 }
 
@@ -228,14 +214,14 @@ body {
 .sheet-cell-value {
   display: block;
   width: 100%;
-  min-height: 16px;
+  height: 32px;
   margin: 0;
   border: 0;
   background: transparent;
-  color: #111;
+  color: inherit;
   text-align: center;
   font: inherit;
-  line-height: 1.2;
+  line-height: 32px;
   padding: 0;
 }
 
@@ -244,28 +230,36 @@ body {
 }
 
 .sheet-cell-input {
-  outline: 1px solid #111;
-  background: #fff;
+  outline: none;
+  color: #e7e5e4;
+  background: transparent;
+  box-shadow: inset 0 0 0 2px #e3b15a;
 }
 
 .sheet-grid td.is-debt {
-  background: #f3f3f3;
+  background: #3a2418;
+  color: #e3b15a;
+}
+
+.sheet-grid tbody tr:nth-child(even) td.is-debt {
+  background: #3a2418;
 }
 
 .sheet-grid td.is-over {
-  color: #9b1c1c;
-  font-weight: 700;
+  color: #fca5a5;
+  font-weight: 600;
 }
 
 .sheet-legend {
-  margin-top: 12px;
   font-size: 13px;
+  color: #a8a29e;
 }
 
 .sheet-legend h3 {
   margin: 0 0 4px;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
+  color: #d6d3d1;
 }
 
 .sheet-legend ul {
@@ -273,16 +267,21 @@ body {
   padding-left: 18px;
 }
 
+.sheet-legend b {
+  color: #e3b15a;
+  font-weight: 600;
+}
+
 .sheet-finalized {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
   font-size: 14px;
+  color: #d6d3d1;
 }
 
 .sheet-finalized input {
   width: 14px;
   height: 14px;
-  accent-color: #111;
+  accent-color: #e3b15a;
 }

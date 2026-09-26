@@ -312,17 +312,17 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
         </div>
       )}
 
-      <article className="official-sheet">
-        <h2 className="sheet-title">{register.subjectTitle}</h2>
-        <p className="sheet-meta">Кількість годин: {register.hours}</p>
-        <p className="sheet-meta">Форма семестрового контролю: {register.controlForm}</p>
-        <p className="sheet-meta">Викладач, який здійснює поточний контроль: {register.currentProfessor}</p>
-        <p className="sheet-meta">Викладач, який виставляє підсумкову оцінку: {register.finalProfessor}</p>
-        <p className="sheet-meta">
-          Предметна спеціальність: {register.specialty}. Ступінь: {register.degree}. Група: {register.group}. Семестр: {register.semester}.
+      <div>
+        <h2 className="text-lg font-semibold">{register.subjectTitle}</h2>
+        <p className="text-sm text-stone-400">
+          {register.hours} год · {register.controlForm} · {register.specialty}, {register.degree} · група {register.group} · семестр {register.semester}
         </p>
+        <p className="text-sm text-stone-400">
+          Поточний контроль: {register.currentProfessor} · Підсумок: {register.finalProfessor}
+        </p>
+      </div>
 
-        <div className="sheet-scroll">
+      <div className="sheet-scroll">
           <table className="sheet-grid">
             <thead>
               <tr>
@@ -434,29 +434,28 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
               )}
             </tbody>
           </table>
-        </div>
+      </div>
 
-        {register.legend?.length > 0 && (
-          <section className="sheet-legend">
-            <h3>Умовні позначення</h3>
-            <ul>
-              {register.legend.map((item) => (
-                <li key={`${item.code}-${item.text}`}><b>{item.code}</b> — {item.text}</li>
-              ))}
-            </ul>
-          </section>
-        )}
+      {register.legend?.length > 0 && (
+        <section className="sheet-legend">
+          <h3>Умовні позначення</h3>
+          <ul>
+            {register.legend.map((item) => (
+              <li key={`${item.code}-${item.text}`}><b>{item.code}</b> — {item.text}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-        <label className="sheet-finalized">
-          <input
-            type="checkbox"
-            checked={Boolean(register.finalized)}
-            disabled={!register.canEdit || busy}
-            onChange={(event) => setFinalized(event.target.checked)}
-          />
-          Журнал заповнений остаточно
-        </label>
-      </article>
+      <label className="sheet-finalized">
+        <input
+          type="checkbox"
+          checked={Boolean(register.finalized)}
+          disabled={!register.canEdit || busy}
+          onChange={(event) => setFinalized(event.target.checked)}
+        />
+        Журнал заповнений остаточно
+      </label>
 
       {allowColumn && register.canEdit && (
         <form className="flex flex-wrap items-end gap-3" onSubmit={addColumn}>
