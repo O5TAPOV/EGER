@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IGradeRepository, GradeRepository>();
         services.AddScoped<IClassSessionRepository, ClassSessionRepository>();
+        services.AddScoped<IJournalSheetRepository, JournalSheetRepository>();
         services.AddScoped<IGradingSettingsRepository, GradingSettingsRepository>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IConnectionMultiplexer>(_ =>

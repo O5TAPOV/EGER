@@ -17,4 +17,6 @@ public class Grade
     public string GradeType { get; set; } = null!;
 
     public string? SessionId { get; set; }
+
+    public bool Absent { get; set; }
 }

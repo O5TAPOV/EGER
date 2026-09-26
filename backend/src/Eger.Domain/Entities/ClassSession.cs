@@ -12,5 +12,13 @@ public class ClassSession
 
     public string GradeType { get; set; } = null!;
 
+    public string ColumnKind { get; set; } = "";
+
+    public int Number { get; set; }
+
+    public string? Code { get; set; }
+
+    public string? Legend { get; set; }
+
     public int MaxPoints { get; set; }
 }

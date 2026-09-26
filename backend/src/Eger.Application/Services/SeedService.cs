@@ -17,6 +17,7 @@ public class SeedService
     private readonly ISubjectRepository _subjects;
     private readonly IGradeRepository _grades;
     private readonly IClassSessionRepository _sessions;
+    private readonly IJournalSheetRepository _sheets;
     private readonly IPasswordHasher _hasher;
 
     public SeedService(
@@ -26,6 +27,7 @@ public class SeedService
         ISubjectRepository subjects,
         IGradeRepository grades,
         IClassSessionRepository sessions,
+        IJournalSheetRepository sheets,
         IPasswordHasher hasher)
     {
         _users = users;
@@ -34,6 +36,7 @@ public class SeedService
         _subjects = subjects;
         _grades = grades;
         _sessions = sessions;
+        _sheets = sheets;
         _hasher = hasher;
     }
 
@@ -43,8 +46,7 @@ public class SeedService
         if (existing.Any(s => s.FullName == DemoStudentName))
         {
             var grades = await _grades.GetAllAsync(ct);
-            var legacy = grades.Count > 0 && !grades.Any(grade => grade.GradeType == GradeTypes.Attendance);
-            if (!legacy)
+            if (await HasOfficialSheetAsync(ct))
             {
                 return new SeedResult
                 {
@@ -59,11 +61,12 @@ public class SeedService
 
             await _grades.DeleteAllAsync(ct);
             await _sessions.DeleteAllAsync(ct);
+            await _sheets.DeleteAllAsync(ct);
             var written = await WriteJournalAsync(ct);
             return new SeedResult
             {
                 AlreadySeeded = false,
-                Message = "Журнал перебудовано: поточні бали до 80 і підсумок до 20",
+                Message = "Відомість перебудовано за формою журналу обліку успішності",
                 Students = existing.Count,
                 Professors = (await _professors.GetAllAsync(ct)).Count,
                 Subjects = (await _subjects.GetAllAsync(ct)).Count,
@@ -130,6 +133,7 @@ public class SeedService
         }
 
         var sessionIds = new Dictionary<(string SubjectId, string Group, DateTime Date, string Type), string>();
+        var numbers = new Dictionary<(string SubjectId, string Group, string Kind), int>();
         var count = 0;
         foreach (var row in DemoRows())
         {
@@ -139,16 +143,37 @@ public class SeedService
                 continue;
             if (!professorByEmail.TryGetValue(row.ProfessorEmail, out var professor))
                 continue;
+            if (IsFeatured(row.SubjectTitle, student.Group))
+                continue;
 
             var key = (subject.Id, student.Group, row.Date, row.Type);
             if (!sessionIds.TryGetValue(key, out var sessionId))
             {
+                var kind = JournalColumns.FromGradeType(row.Type);
+                var numberKey = (subject.Id, student.Group, kind);
+                numbers.TryGetValue(numberKey, out var lastNumber);
+                var number = lastNumber + 1;
+                numbers[numberKey] = number;
+                var code = "";
+                string? legend = null;
+                if (kind == JournalColumns.Control)
+                {
+                    code = row.Type == GradeTypes.Homework
+                        ? number == 1 ? "ДЗ" : $"ДЗ{number}"
+                        : number == 1 ? "КР" : $"КР{number}";
+                    legend = row.Type;
+                }
+
                 var session = new ClassSession
                 {
                     SubjectId = subject.Id,
                     Group = student.Group,
                     Date = row.Date,
                     GradeType = row.Type,
+                    ColumnKind = kind,
+                    Number = kind == "Підсумок" ? 0 : number,
+                    Code = code,
+                    Legend = legend,
                     MaxPoints = ColumnMax(row.SubjectTitle, row.Type)
                 };
                 await _sessions.CreateAsync(session, ct);
@@ -159,8 +184,22 @@ public class SeedService
             count += await AddGradeAsync(student, subject, professor, row.Points, row.Type, row.Date, sessionId, ct);
         }
 
+        count += await WriteFeaturedSheetsAsync(byEmail, subjects, professorByEmail, ct);
         return count;
     }
+
+    private async Task<bool> HasOfficialSheetAsync(CancellationToken ct)
+    {
+        var subjects = await _subjects.GetAllAsync(ct);
+        var databases = subjects.FirstOrDefault(subject => subject.Title == "Теорія баз даних");
+        if (databases is null)
+            return false;
+        var sessions = await _sessions.GetBySubjectGroupAsync(databases.Id, "КН-21", ct);
+        return sessions.Count(session => session.ColumnKind == JournalColumns.Lecture) >= 8;
+    }
+
+    private static bool IsFeatured(string subject, string group) =>
+        group == "КН-21" && subject is "Теорія баз даних" or "Алгоритми та структури даних" or "Веб-технології";
 
     private static int ColumnMax(string subject, string type) => (subject, type) switch
     {
@@ -199,42 +238,6 @@ public class SeedService
     {
         var rows = new (string Student, string Subject, string Professor, int Points, string Type, int Y, int M, int D)[]
         {
-            ("anton.ostapov@eger.ua", "Теорія баз даних", "professor@eger.ua", 10, GradeTypes.Attendance, 2025, 10, 2),
-            ("anton.ostapov@eger.ua", "Теорія баз даних", "professor@eger.ua", 18, GradeTypes.Homework, 2025, 10, 16),
-            ("anton.ostapov@eger.ua", "Теорія баз даних", "professor@eger.ua", 22, GradeTypes.Practical, 2025, 11, 6),
-            ("anton.ostapov@eger.ua", "Теорія баз даних", "professor@eger.ua", 25, GradeTypes.Module, 2025, 12, 4),
-            ("anton.ostapov@eger.ua", "Теорія баз даних", "professor@eger.ua", 20, GradeTypes.Exam, 2026, 1, 16),
-
-            ("anton.ostapov@eger.ua", "Алгоритми та структури даних", "professor@eger.ua", 6, GradeTypes.Attendance, 2025, 10, 9),
-            ("anton.ostapov@eger.ua", "Алгоритми та структури даних", "professor@eger.ua", 14, GradeTypes.Homework, 2025, 11, 13),
-            ("anton.ostapov@eger.ua", "Алгоритми та структури даних", "professor@eger.ua", 16, GradeTypes.Practical, 2025, 12, 11),
-
-            ("anton.ostapov@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 4, GradeTypes.Attendance, 2025, 10, 7),
-            ("anton.ostapov@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 8, GradeTypes.Homework, 2025, 11, 4),
-            ("anton.ostapov@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 10, GradeTypes.Practical, 2025, 12, 2),
-            ("anton.ostapov@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 14, GradeTypes.Credit, 2026, 1, 20),
-
-            ("daryna.kozak@eger.ua", "Теорія баз даних", "professor@eger.ua", 8, GradeTypes.Attendance, 2025, 10, 2),
-            ("daryna.kozak@eger.ua", "Теорія баз даних", "professor@eger.ua", 12, GradeTypes.Homework, 2025, 10, 16),
-            ("daryna.kozak@eger.ua", "Теорія баз даних", "professor@eger.ua", 16, GradeTypes.Practical, 2025, 11, 6),
-            ("daryna.kozak@eger.ua", "Теорія баз даних", "professor@eger.ua", 20, GradeTypes.Module, 2025, 12, 4),
-            ("daryna.kozak@eger.ua", "Теорія баз даних", "professor@eger.ua", 16, GradeTypes.Exam, 2026, 1, 16),
-
-            ("maksym.lysenko@eger.ua", "Теорія баз даних", "professor@eger.ua", 6, GradeTypes.Attendance, 2025, 10, 2),
-            ("maksym.lysenko@eger.ua", "Теорія баз даних", "professor@eger.ua", 10, GradeTypes.Homework, 2025, 10, 16),
-            ("maksym.lysenko@eger.ua", "Теорія баз даних", "professor@eger.ua", 12, GradeTypes.Practical, 2025, 11, 6),
-            ("maksym.lysenko@eger.ua", "Теорія баз даних", "professor@eger.ua", 8, GradeTypes.Module, 2025, 12, 4),
-            ("maksym.lysenko@eger.ua", "Теорія баз даних", "professor@eger.ua", 8, GradeTypes.Exam, 2026, 1, 16),
-
-            ("maksym.lysenko@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 5, GradeTypes.Attendance, 2025, 10, 7),
-            ("maksym.lysenko@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 7, GradeTypes.Homework, 2025, 11, 4),
-            ("maksym.lysenko@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 8, GradeTypes.Practical, 2025, 12, 2),
-            ("maksym.lysenko@eger.ua", "Веб-технології", "ihor.bondarenko@eger.ua", 10, GradeTypes.Credit, 2026, 1, 20),
-
-            ("oksana.kravchuk@eger.ua", "Алгоритми та структури даних", "professor@eger.ua", 4, GradeTypes.Attendance, 2025, 10, 9),
-            ("oksana.kravchuk@eger.ua", "Алгоритми та структури даних", "professor@eger.ua", 6, GradeTypes.Homework, 2025, 11, 13),
-            ("oksana.kravchuk@eger.ua", "Алгоритми та структури даних", "professor@eger.ua", 6, GradeTypes.Practical, 2025, 12, 11),
-
             ("sofia.tkachenko@eger.ua", "Алгоритми та структури даних", "ihor.bondarenko@eger.ua", 10, GradeTypes.Attendance, 2025, 10, 9),
             ("sofia.tkachenko@eger.ua", "Алгоритми та структури даних", "ihor.bondarenko@eger.ua", 16, GradeTypes.Homework, 2025, 11, 13),
             ("sofia.tkachenko@eger.ua", "Алгоритми та структури даних", "ihor.bondarenko@eger.ua", 18, GradeTypes.Practical, 2025, 11, 27),
@@ -342,6 +345,253 @@ public class SeedService
         await _subjects.CreateAsync(subject, ct);
         return subject;
     }
+
+    private async Task<int> WriteFeaturedSheetsAsync(
+        Dictionary<string, Student> byEmail,
+        Dictionary<string, Subject> subjects,
+        Dictionary<string, Professor> professorByEmail,
+        CancellationToken ct)
+    {
+        if (!subjects.TryGetValue("Теорія баз даних", out var databases)
+            || !subjects.TryGetValue("Алгоритми та структури даних", out var algorithms)
+            || !subjects.TryGetValue("Веб-технології", out var web)
+            || !professorByEmail.TryGetValue("professor@eger.ua", out var kovalenko)
+            || !professorByEmail.TryGetValue("ihor.bondarenko@eger.ua", out var bondarenko))
+            return 0;
+
+        var count = 0;
+        count += await WriteDatabaseSheetAsync(databases, kovalenko, byEmail, ct);
+        count += await WriteAlgorithmsSheetAsync(algorithms, kovalenko, bondarenko, byEmail, ct);
+        count += await WriteWebSheetAsync(web, bondarenko, byEmail, ct);
+        return count;
+    }
+
+    private async Task<int> WriteDatabaseSheetAsync(
+        Subject subject,
+        Professor professor,
+        Dictionary<string, Student> byEmail,
+        CancellationToken ct)
+    {
+        await PutSheetAsync(subject, "КН-21", 150, "Екзамен", "Лабораторні", professor, professor, ct);
+        var lectures = await AddLessonsAsync(subject, "КН-21", JournalColumns.Lecture, 8, 2, Day(2025, 9, 2), ct);
+        var labs = await AddLessonsAsync(subject, "КН-21", JournalColumns.Laboratory, 6, 4, Day(2025, 9, 4), ct);
+        var controls = await AddControlsAsync(subject, "КН-21", ct,
+            ("КЛ", "контрольна робота з нормалізації", 10),
+            ("ДЗ", "домашнє завдання з SQL", 10),
+            ("КР1", "захист моделі бази даних", 10),
+            ("КР2", "підсумкова практична робота", 10));
+        var count = 0;
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, lectures, [2, 2, 2, 2, 2, 2, 1, 2], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, labs, [4, 4, 4, 4, 4, 3], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, controls, [10, 8, 8, 8], ct);
+        count += await WriteFinalAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, 20, GradeTypes.Exam, Day(2026, 1, 16), ct);
+
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("daryna.kozak@eger.ua"), subject, professor, lectures, [2, 2, 1, 2, 2, 2, 2, 1], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("daryna.kozak@eger.ua"), subject, professor, labs, [3, 3, 4, 3, 3, 3], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("daryna.kozak@eger.ua"), subject, professor, controls, [8, 6, 7, 6], ct);
+        count += await WriteFinalAsync(byEmail.GetValueOrDefault("daryna.kozak@eger.ua"), subject, professor, 15, GradeTypes.Exam, Day(2026, 1, 16), ct);
+
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, lectures, [1, -1, 1, 1, 2, 1, 1, 1], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, labs, [2, 2, 2, 1, 2, 2], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, controls, [4, 3, 4, 4], ct);
+        count += await WriteFinalAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, 8, GradeTypes.Exam, Day(2026, 1, 16), ct);
+        return count;
+    }
+
+    private async Task<int> WriteAlgorithmsSheetAsync(
+        Subject subject,
+        Professor currentProfessor,
+        Professor finalProfessor,
+        Dictionary<string, Student> byEmail,
+        CancellationToken ct)
+    {
+        await PutSheetAsync(subject, "КН-21", 180, "Екзамен", "Практичні", currentProfessor, finalProfessor, ct);
+        var lectures = await AddLessonsAsync(subject, "КН-21", JournalColumns.Lecture, 6, 2, Day(2025, 9, 3), ct);
+        var practicals = await AddLessonsAsync(subject, "КН-21", JournalColumns.Practical, 4, 4, Day(2025, 9, 5), ct);
+        var controls = await AddControlsAsync(subject, "КН-21", ct,
+            ("КЛ", "контрольна робота з алгоритмів", 10),
+            ("ДЗ", "домашнє завдання зі структур даних", 10));
+        var count = 0;
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, lectures, [2, 2, 1, 2, 1, 2], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, practicals, [4, 3, 3, 2], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, controls, [8, 6], ct);
+
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("oksana.kravchuk@eger.ua"), subject, currentProfessor, lectures, [1, 1, -1, 1, 1, 1], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("oksana.kravchuk@eger.ua"), subject, currentProfessor, practicals, [2, 1, 1, null], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("oksana.kravchuk@eger.ua"), subject, currentProfessor, controls, [3, 2], ct);
+        return count;
+    }
+
+    private async Task<int> WriteWebSheetAsync(
+        Subject subject,
+        Professor professor,
+        Dictionary<string, Student> byEmail,
+        CancellationToken ct)
+    {
+        await PutSheetAsync(subject, "КН-21", 120, "Залік", "Лабораторні", professor, professor, ct);
+        var lectures = await AddLessonsAsync(subject, "КН-21", JournalColumns.Lecture, 4, 2, Day(2025, 9, 8), ct);
+        var labs = await AddLessonsAsync(subject, "КН-21", JournalColumns.Laboratory, 3, 4, Day(2025, 9, 10), ct);
+        var controls = await AddControlsAsync(subject, "КН-21", ct,
+            ("КЛ", "контрольна робота з верстки", 8),
+            ("ДЗ", "домашнє завдання з інтерфейсу", 8));
+        var count = 0;
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, lectures, [1, 1, 1, 1], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, labs, [2, 2, 2], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, controls, [4, 4], ct);
+        count += await WriteFinalAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, 14, GradeTypes.Credit, Day(2026, 1, 20), ct);
+
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, lectures, [1, 1, 1, 1], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, labs, [1, 1, 1], ct);
+        count += await WriteMarksAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, controls, [2, 2], ct);
+        count += await WriteFinalAsync(byEmail.GetValueOrDefault("maksym.lysenko@eger.ua"), subject, professor, 8, GradeTypes.Credit, Day(2026, 1, 20), ct);
+        return count;
+    }
+
+    private async Task PutSheetAsync(
+        Subject subject,
+        string group,
+        int hours,
+        string controlForm,
+        string workTitle,
+        Professor currentProfessor,
+        Professor finalProfessor,
+        CancellationToken ct)
+    {
+        var existing = await _sheets.GetBySubjectGroupAsync(subject.Id, group, ct);
+        if (existing is not null)
+            return;
+        await _sheets.CreateAsync(new JournalSheet
+        {
+            SubjectId = subject.Id,
+            Group = group,
+            Hours = hours,
+            ControlForm = controlForm,
+            WorkTitle = workTitle,
+            CurrentProfessorId = currentProfessor.Id,
+            FinalProfessorId = finalProfessor.Id,
+            Specialty = "122 Комп'ютерні науки",
+            Degree = "бакалавр",
+            Semester = 5
+        }, ct);
+    }
+
+    private async Task<List<ClassSession>> AddLessonsAsync(
+        Subject subject,
+        string group,
+        string kind,
+        int count,
+        int maxPoints,
+        DateTime start,
+        CancellationToken ct)
+    {
+        var sessions = new List<ClassSession>();
+        for (var index = 0; index < count; index++)
+        {
+            var session = new ClassSession
+            {
+                SubjectId = subject.Id,
+                Group = group,
+                Date = start.AddDays(index * 7),
+                GradeType = JournalColumns.ToGradeType(kind),
+                ColumnKind = kind,
+                Number = index + 1,
+                MaxPoints = maxPoints
+            };
+            await _sessions.CreateAsync(session, ct);
+            sessions.Add(session);
+        }
+
+        return sessions;
+    }
+
+    private async Task<List<ClassSession>> AddControlsAsync(
+        Subject subject,
+        string group,
+        CancellationToken ct,
+        params (string Code, string Legend, int MaxPoints)[] items)
+    {
+        var sessions = new List<ClassSession>();
+        for (var index = 0; index < items.Length; index++)
+        {
+            var item = items[index];
+            var session = new ClassSession
+            {
+                SubjectId = subject.Id,
+                Group = group,
+                Date = Day(2025, 12, index + 1),
+                GradeType = GradeTypes.Module,
+                ColumnKind = JournalColumns.Control,
+                Number = index + 1,
+                Code = item.Code,
+                Legend = item.Legend,
+                MaxPoints = item.MaxPoints
+            };
+            await _sessions.CreateAsync(session, ct);
+            sessions.Add(session);
+        }
+
+        return sessions;
+    }
+
+    private async Task<int> WriteMarksAsync(
+        Student? student,
+        Subject subject,
+        Professor professor,
+        IReadOnlyList<ClassSession> columns,
+        IReadOnlyList<int?> marks,
+        CancellationToken ct)
+    {
+        if (student is null)
+            return 0;
+        var count = 0;
+        for (var index = 0; index < columns.Count && index < marks.Count; index++)
+        {
+            var mark = marks[index];
+            if (mark is null)
+                continue;
+            var absent = mark.Value < 0;
+            await _grades.CreateAsync(new Grade
+            {
+                StudentId = student.Id,
+                SubjectId = subject.Id,
+                ProfessorId = professor.Id,
+                GradeValue = absent ? 0 : mark.Value,
+                GradeType = columns[index].GradeType,
+                Date = columns[index].Date,
+                SessionId = columns[index].Id,
+                Absent = absent
+            }, ct);
+            count++;
+        }
+
+        return count;
+    }
+
+    private async Task<int> WriteFinalAsync(
+        Student? student,
+        Subject subject,
+        Professor professor,
+        int points,
+        string gradeType,
+        DateTime date,
+        CancellationToken ct)
+    {
+        if (student is null)
+            return 0;
+        await _grades.CreateAsync(new Grade
+        {
+            StudentId = student.Id,
+            SubjectId = subject.Id,
+            ProfessorId = professor.Id,
+            GradeValue = points,
+            GradeType = gradeType,
+            Date = date
+        }, ct);
+        return 1;
+    }
+
+    private static DateTime Day(int year, int month, int day) =>
+        new(year, month, day, 0, 0, 0, DateTimeKind.Utc);
 
     private async Task<int> AddGradeAsync(
         Student student,

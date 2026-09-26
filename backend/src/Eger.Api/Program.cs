@@ -166,6 +166,7 @@ using (var scope = app.Services.CreateScope())
     await services.GetRequiredService<ISubjectRepository>().EnsureIndexesAsync();
     await services.GetRequiredService<IGradeRepository>().EnsureIndexesAsync();
     await services.GetRequiredService<IClassSessionRepository>().EnsureIndexesAsync();
+    await services.GetRequiredService<IJournalSheetRepository>().EnsureIndexesAsync();
     await services.GetRequiredService<IGradingSettingsRepository>().GetAsync();
 
     var adminEmail = app.Configuration["Seed:AdminEmail"] ?? "admin@eger.ua";

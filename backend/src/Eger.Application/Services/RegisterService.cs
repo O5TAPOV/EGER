@@ -14,6 +14,7 @@ public class RegisterService
     private readonly ISubjectRepository _subjects;
     private readonly IGradeRepository _grades;
     private readonly IClassSessionRepository _sessions;
+    private readonly IJournalSheetRepository _sheets;
     private readonly IGradingSettingsRepository _settings;
 
     public RegisterService(
@@ -22,6 +23,7 @@ public class RegisterService
         ISubjectRepository subjects,
         IGradeRepository grades,
         IClassSessionRepository sessions,
+        IJournalSheetRepository sheets,
         IGradingSettingsRepository settings)
     {
         _students = students;
@@ -29,6 +31,7 @@ public class RegisterService
         _subjects = subjects;
         _grades = grades;
         _sessions = sessions;
+        _sheets = sheets;
         _settings = settings;
     }
 
@@ -48,42 +51,67 @@ public class RegisterService
             sheetGroup = group!.Trim();
 
         await AttachOrphansAsync(subject.Id, sheetGroup, ct);
+        await EnsureSheetAsync(subject, sheetGroup, ct);
         return await BuildAsync(subject, sheetGroup, students, canEdit, ct);
+    }
+
+    public async Task<RegisterResponse> SetFinalizedAsync(Actor actor, UpdateSheetRequest request, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        var subject = await RequireSubjectAsync(request.SubjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        var group = request.Group.Trim();
+        var sheet = await EnsureSheetAsync(subject, group, ct);
+        sheet.Finalized = request.Finalized;
+        await _sheets.UpdateAsync(sheet, ct);
+        var students = (await _students.GetByGroupAsync(group, ct))
+            .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
+            .ToList();
+        return await BuildAsync(subject, group, students, canEdit: true, ct);
     }
 
     public async Task<RegisterResponse> AddColumnAsync(Actor actor, AddColumnRequest request, CancellationToken ct = default)
     {
         if (actor.Role == Roles.Student)
             throw new AppException(403, "Недостатньо прав");
-        if (!GradeTypes.IsKnown(request.GradeType))
-            throw new AppException(400, "Невідомий тип оцінювання");
-        if (request.Date is null)
-            throw new AppException(400, "Вкажіть дату колонки");
+        var kind = request.Kind.Trim();
+        if (kind is not (JournalColumns.Lecture or JournalColumns.Laboratory or JournalColumns.Practical or JournalColumns.Control))
+            throw new AppException(400, "Невідомий тип колонки");
+        if (kind != JournalColumns.Control && request.Date is null)
+            throw new AppException(400, "Вкажіть дату заняття");
 
         var subject = await RequireSubjectAsync(request.SubjectId, ct);
         await EnsureTeachesAsync(actor, subject, ct);
         var settings = await _settings.GetAsync(ct);
         var group = request.Group.Trim();
+        if (request.MaxPoints > settings.CurrentMax)
+            throw new AppException(400, $"Увага. Максимум колонки {request.MaxPoints} перевищує допустимий максимум поточних балів {settings.CurrentMax}.");
+
         var sessions = await _sessions.GetBySubjectGroupAsync(subject.Id, group, ct);
-        var isFinal = GradeTypes.IsFinal(request.GradeType);
-        if (isFinal && sessions.Any(session => GradeTypes.IsFinal(session.GradeType)))
-            throw new AppException(400, "Для цієї відомості вже є колонка підсумкового контролю");
-
-        var cap = isFinal ? settings.FinalMax : settings.CurrentMax;
-        if (request.MaxPoints > cap)
-        {
-            var kind = isFinal ? "підсумкових" : "поточних";
-            throw new AppException(400, $"Увага. Максимум колонки {request.MaxPoints} перевищує допустимий максимум {kind} балів {cap}.");
-        }
-
+        var number = sessions.Where(session => ResolveKind(session) == kind).Select(session => session.Number).DefaultIfEmpty(0).Max() + 1;
+        var code = kind == JournalColumns.Control
+            ? (string.IsNullOrWhiteSpace(request.Code) ? $"К{number}" : request.Code.Trim())
+            : "";
         await _sessions.CreateAsync(new ClassSession
         {
             SubjectId = subject.Id,
             Group = group,
             Date = Dates.NormalizeUtc(request.Date),
-            GradeType = request.GradeType,
+            GradeType = JournalColumns.ToGradeType(kind),
+            ColumnKind = kind,
+            Number = number,
+            Code = code,
+            Legend = string.IsNullOrWhiteSpace(request.Legend) ? request.Code?.Trim() : request.Legend.Trim(),
             MaxPoints = request.MaxPoints
         }, ct);
+
+        if (JournalColumns.IsWork(kind) && !sessions.Any(item => JournalColumns.IsWork(ResolveKind(item))))
+        {
+            var sheet = await EnsureSheetAsync(subject, group, ct);
+            sheet.WorkTitle = kind == JournalColumns.Practical ? "Практичні" : "Лабораторні";
+            await _sheets.UpdateAsync(sheet, ct);
+        }
 
         var students = (await _students.GetByGroupAsync(group, ct))
             .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
@@ -95,55 +123,69 @@ public class RegisterService
     {
         if (actor.Role == Roles.Student)
             throw new AppException(403, "Недостатньо прав");
-        Ids.Ensure(request.SessionId);
         Ids.Ensure(request.StudentId);
-        if (request.Points is < 0)
-            throw new AppException(400, "Бал не може бути від'ємним");
 
-        var session = await _sessions.GetByIdAsync(request.SessionId, ct)
+        if (request.FinalColumn)
+        {
+            Ids.Ensure(request.SubjectId);
+            var subject = await RequireSubjectAsync(request.SubjectId!, ct);
+            var professor = await EnsureTeachesAsync(actor, subject, ct);
+            var student = await _students.GetByIdAsync(request.StudentId, ct)
+                ?? throw new AppException(404, "Студента не знайдено");
+            await SaveFinalAsync(subject, student, professor.Id, request.Mark, ct);
+            return await BuildGroupAsync(subject, student.Group, ct);
+        }
+
+        Ids.Ensure(request.SessionId);
+        var session = await _sessions.GetByIdAsync(request.SessionId!, ct)
             ?? throw new AppException(404, "Колонку не знайдено");
-        var subject = await RequireSubjectAsync(session.SubjectId, ct);
-        var professor = await EnsureTeachesAsync(actor, subject, ct);
-        var student = await _students.GetByIdAsync(request.StudentId, ct)
+        var lessonSubject = await RequireSubjectAsync(session.SubjectId, ct);
+        var lessonProfessor = await EnsureTeachesAsync(actor, lessonSubject, ct);
+        var lessonStudent = await _students.GetByIdAsync(request.StudentId, ct)
             ?? throw new AppException(404, "Студента не знайдено");
-        if (!string.Equals(student.Group, session.Group, StringComparison.Ordinal))
+        if (!string.Equals(lessonStudent.Group, session.Group, StringComparison.Ordinal))
             throw new AppException(400, "Студент не належить до цієї групи");
 
-        var own = (await _grades.GetByStudentAsync(student.Id, ct))
-            .Where(grade => grade.SubjectId == subject.Id)
+        if (GradeTypes.IsFinal(session.GradeType) || ResolveKind(session) == "Підсумок")
+        {
+            await SaveFinalAsync(lessonSubject, lessonStudent, lessonProfessor.Id, request.Mark, ct);
+            return await BuildGroupAsync(lessonSubject, session.Group, ct);
+        }
+
+        var kind = ResolveKind(session);
+        var parsed = ParseMark(request.Mark, kind == JournalColumns.Lecture);
+        var own = (await _grades.GetByStudentAsync(lessonStudent.Id, ct))
+            .Where(grade => grade.SubjectId == lessonSubject.Id)
             .ToList();
         var cellGrades = own.Where(grade => grade.SessionId == session.Id).ToList();
 
-        if (request.Points is null)
+        if (parsed.Clear)
         {
             foreach (var grade in cellGrades)
                 await _grades.DeleteAsync(grade.Id, ct);
         }
         else
         {
-            var points = request.Points.Value;
             var others = own.Where(grade => grade.SessionId != session.Id).ToList();
-            if (GradeTypes.IsFinal(session.GradeType) && others.Any(grade => GradeTypes.IsFinal(grade.GradeType)))
-                throw new AppException(400, "Підсумок для цього студента з дисципліни можна виставити лише один раз");
-
             var preview = new List<Grade>(others)
             {
                 new()
                 {
-                    StudentId = student.Id,
-                    SubjectId = subject.Id,
+                    StudentId = lessonStudent.Id,
+                    SubjectId = lessonSubject.Id,
                     GradeType = session.GradeType,
-                    GradeValue = points,
+                    GradeValue = parsed.Absent ? 0 : parsed.Points,
                     Date = session.Date,
-                    SessionId = session.Id
+                    SessionId = session.Id,
+                    Absent = parsed.Absent
                 }
             };
             var settings = await _settings.GetAsync(ct);
             var standing = GradeBook.Evaluate(preview, settings);
             var messages = new List<string>();
-            if (points > session.MaxPoints)
-                messages.Add(PointGuard.Column(student.FullName, points, session.MaxPoints));
-            messages.AddRange(PointGuard.Describe(student.FullName, standing, settings));
+            if (!parsed.Absent && parsed.Points > session.MaxPoints)
+                messages.Add(PointGuard.Column(lessonStudent.FullName, parsed.Points, session.MaxPoints));
+            messages.AddRange(PointGuard.Describe(lessonStudent.FullName, standing, settings));
             if (messages.Count > 0)
                 throw new AppException(400, PointGuard.Join(messages));
 
@@ -152,32 +194,31 @@ public class RegisterService
             {
                 await _grades.CreateAsync(new Grade
                 {
-                    StudentId = student.Id,
-                    SubjectId = subject.Id,
-                    ProfessorId = professor.Id,
-                    GradeValue = points,
+                    StudentId = lessonStudent.Id,
+                    SubjectId = lessonSubject.Id,
+                    ProfessorId = lessonProfessor.Id,
+                    GradeValue = parsed.Absent ? 0 : parsed.Points,
                     GradeType = session.GradeType,
                     Date = session.Date,
-                    SessionId = session.Id
+                    SessionId = session.Id,
+                    Absent = parsed.Absent
                 }, ct);
             }
             else
             {
-                keeper.GradeValue = points;
+                keeper.GradeValue = parsed.Absent ? 0 : parsed.Points;
                 keeper.GradeType = session.GradeType;
                 keeper.Date = session.Date;
-                keeper.ProfessorId = professor.Id;
+                keeper.ProfessorId = lessonProfessor.Id;
                 keeper.SessionId = session.Id;
+                keeper.Absent = parsed.Absent;
                 await _grades.UpdateAsync(keeper, ct);
                 foreach (var extra in cellGrades.Skip(1))
                     await _grades.DeleteAsync(extra.Id, ct);
             }
         }
 
-        var students = (await _students.GetByGroupAsync(session.Group, ct))
-            .OrderBy(item => item.FullName, StringComparer.CurrentCulture)
-            .ToList();
-        return await BuildAsync(subject, session.Group, students, canEdit: true, ct);
+        return await BuildGroupAsync(lessonSubject, session.Group, ct);
     }
 
     private async Task AttachOrphansAsync(string subjectId, string group, CancellationToken ct)
@@ -200,13 +241,32 @@ public class RegisterService
                 session = sessions.FirstOrDefault(item => GradeTypes.IsFinal(item.GradeType));
             if (session is null)
             {
+                var kind = JournalColumns.FromGradeType(bucket.Key.GradeType);
+                var number = sessions.Count(item => ResolveKind(item) == kind) + 1;
+                var code = "";
+                string? legend = null;
+                if (kind == JournalColumns.Control)
+                {
+                    code = bucket.Key.GradeType switch
+                    {
+                        GradeTypes.Homework => number == 1 ? "ДЗ" : $"ДЗ{number}",
+                        GradeTypes.Module => number == 1 ? "КР" : $"КР{number}",
+                        _ => $"К{number}"
+                    };
+                    legend = bucket.Key.GradeType;
+                }
+
                 session = new ClassSession
                 {
                     SubjectId = subjectId,
                     Group = group,
                     Date = DateTime.SpecifyKind(bucket.Key.Date, DateTimeKind.Utc),
                     GradeType = bucket.Key.GradeType,
-                    MaxPoints = Math.Max(1, bucket.Max(grade => grade.GradeValue))
+                    ColumnKind = kind,
+                    Number = number,
+                    Code = code,
+                    Legend = legend,
+                    MaxPoints = Math.Max(1, bucket.Where(grade => !grade.Absent).Select(grade => grade.GradeValue).DefaultIfEmpty(1).Max())
                 };
                 await _sessions.CreateAsync(session, ct);
                 sessions.Add(session);
@@ -220,6 +280,101 @@ public class RegisterService
         }
     }
 
+    private async Task<RegisterResponse> BuildGroupAsync(Subject subject, string group, CancellationToken ct)
+    {
+        var students = (await _students.GetByGroupAsync(group, ct))
+            .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
+            .ToList();
+        return await BuildAsync(subject, group, students, canEdit: true, ct);
+    }
+
+    private async Task SaveFinalAsync(Subject subject, Student student, string professorId, string? mark, CancellationToken ct)
+    {
+        var parsed = ParseMark(mark, allowsAbsence: false);
+        var own = (await _grades.GetByStudentAsync(student.Id, ct))
+            .Where(grade => grade.SubjectId == subject.Id)
+            .ToList();
+        var finals = own.Where(grade => GradeTypes.IsFinal(grade.GradeType)).OrderByDescending(grade => grade.Date).ToList();
+        if (parsed.Clear)
+        {
+            foreach (var grade in finals)
+                await _grades.DeleteAsync(grade.Id, ct);
+            return;
+        }
+
+        var sheet = await EnsureSheetAsync(subject, student.Group, ct);
+        var gradeType = sheet.ControlForm == "Залік" ? GradeTypes.Credit : GradeTypes.Exam;
+        var settings = await _settings.GetAsync(ct);
+        var others = own.Where(grade => !GradeTypes.IsFinal(grade.GradeType)).ToList();
+        var preview = new List<Grade>(others)
+        {
+            new()
+            {
+                StudentId = student.Id,
+                SubjectId = subject.Id,
+                GradeType = gradeType,
+                GradeValue = parsed.Points,
+                Date = DateTime.UtcNow
+            }
+        };
+        var standing = GradeBook.Evaluate(preview, settings);
+        var messages = PointGuard.Describe(student.FullName, standing, settings);
+        if (messages.Count > 0)
+            throw new AppException(400, PointGuard.Join(messages));
+
+        var keeper = finals.FirstOrDefault();
+        if (keeper is null)
+        {
+            await _grades.CreateAsync(new Grade
+            {
+                StudentId = student.Id,
+                SubjectId = subject.Id,
+                ProfessorId = professorId,
+                GradeValue = parsed.Points,
+                GradeType = gradeType,
+                Date = DateTime.UtcNow
+            }, ct);
+        }
+        else
+        {
+            keeper.GradeValue = parsed.Points;
+            keeper.GradeType = gradeType;
+            keeper.ProfessorId = professorId;
+            keeper.Absent = false;
+            keeper.Date = DateTime.UtcNow;
+            await _grades.UpdateAsync(keeper, ct);
+            foreach (var extra in finals.Skip(1))
+                await _grades.DeleteAsync(extra.Id, ct);
+        }
+    }
+
+    private async Task<JournalSheet> EnsureSheetAsync(Subject subject, string group, CancellationToken ct)
+    {
+        var existing = await _sheets.GetBySubjectGroupAsync(subject.Id, group, ct);
+        if (existing is not null)
+            return existing;
+
+        var sessions = await _sessions.GetBySubjectGroupAsync(subject.Id, group, ct);
+        var studentIds = (await _students.GetByGroupAsync(group, ct)).Select(student => student.Id).ToHashSet();
+        var grades = (await _grades.GetBySubjectAsync(subject.Id, ct))
+            .Where(grade => studentIds.Contains(grade.StudentId))
+            .ToList();
+        var hasPractical = sessions.Any(session => ResolveKind(session) == JournalColumns.Practical);
+        var hasLaboratory = sessions.Any(session => ResolveKind(session) == JournalColumns.Laboratory);
+        var sheet = new JournalSheet
+        {
+            SubjectId = subject.Id,
+            Group = group,
+            Hours = Math.Max(subject.Credits, 1) * 30,
+            ControlForm = grades.Any(grade => grade.GradeType == GradeTypes.Credit) ? "Залік" : "Екзамен",
+            WorkTitle = hasPractical && !hasLaboratory ? "Практичні" : "Лабораторні",
+            CurrentProfessorId = subject.ProfessorIds.FirstOrDefault() ?? "",
+            FinalProfessorId = subject.ProfessorIds.LastOrDefault() ?? subject.ProfessorIds.FirstOrDefault() ?? ""
+        };
+        await _sheets.CreateAsync(sheet, ct);
+        return sheet;
+    }
+
     private async Task<RegisterResponse> BuildAsync(
         Subject subject,
         string group,
@@ -228,11 +383,26 @@ public class RegisterService
         CancellationToken ct)
     {
         var settings = await _settings.GetAsync(ct);
-        var sessions = (await _sessions.GetBySubjectGroupAsync(subject.Id, group, ct))
-            .OrderBy(session => session.Date)
-            .ThenBy(session => GradeTypes.IsFinal(session.GradeType))
-            .ThenBy(session => session.Id, StringComparer.Ordinal)
+        var sheet = await EnsureSheetAsync(subject, group, ct);
+        var professorIds = new[] { sheet.CurrentProfessorId, sheet.FinalProfessorId };
+        var professors = await _professors.GetByIdsAsync(professorIds, ct);
+        var sessions = (await _sessions.GetBySubjectGroupAsync(subject.Id, group, ct)).ToList();
+        var lessons = sessions
+            .Where(session => !GradeTypes.IsFinal(session.GradeType) && ResolveKind(session) != "Підсумок")
             .ToList();
+        var lectureSessions = Ordered(lessons.Where(session => ResolveKind(session) == JournalColumns.Lecture));
+        var workSessions = Ordered(lessons.Where(session => JournalColumns.IsWork(ResolveKind(session))));
+        var controlSessions = Ordered(lessons.Where(session => ResolveKind(session) == JournalColumns.Control));
+        var lectures = MapColumns(lectureSessions, dated: true);
+        var works = MapColumns(workSessions, dated: true);
+        var controls = MapColumns(controlSessions, dated: false);
+        var plannedSum = lectures.Sum(column => column.MaxPoints)
+            + works.Sum(column => column.MaxPoints)
+            + controls.Sum(column => column.MaxPoints);
+        var plannedCurrent = lectures.Count + works.Count + controls.Count == 0
+            ? settings.CurrentMax
+            : Math.Min(plannedSum, settings.CurrentMax);
+
         var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
         var rows = new List<RegisterRowResponse>();
         var number = 1;
@@ -241,13 +411,21 @@ public class RegisterService
             var own = grades.Where(grade => grade.StudentId == student.Id).ToList();
             var standing = GradeBook.Evaluate(own, settings);
             var warnings = PointGuard.Describe(student.FullName, standing, settings);
-            foreach (var session in sessions)
+            foreach (var session in lectureSessions.Concat(workSessions).Concat(controlSessions))
             {
-                var taken = own.Where(grade => grade.SessionId == session.Id).Sum(grade => grade.GradeValue);
-                var filled = own.Any(grade => grade.SessionId == session.Id);
-                if (filled && taken > session.MaxPoints)
-                    warnings.Add(PointGuard.Column(student.FullName, taken, session.MaxPoints));
+                var taken = own.Where(grade => grade.SessionId == session.Id && !grade.Absent).ToList();
+                if (taken.Count == 0)
+                    continue;
+                var sum = taken.Sum(grade => grade.GradeValue);
+                if (sum > session.MaxPoints)
+                    warnings.Add(PointGuard.Column(student.FullName, sum, session.MaxPoints));
             }
+
+            var lectureCells = MapCells(lectureSessions, own);
+            var workCells = MapCells(workSessions, own);
+            var controlCells = MapCells(controlSessions, own);
+            var showScores = standing.HasFinal
+                || lectureCells.Concat(workCells).Concat(controlCells).Any(cell => cell.Points is not null);
             rows.Add(new RegisterRowResponse
             {
                 Number = number++,
@@ -256,61 +434,159 @@ public class RegisterService
                 CurrentPoints = standing.CurrentPoints,
                 FinalPoints = standing.HasFinal ? standing.FinalPoints : null,
                 Total = standing.Total,
-                HasMarks = own.Count > 0,
+                ShowScores = showScores,
                 HasFinal = standing.HasFinal,
                 Debt = standing.Debt,
                 WithinLimits = standing.WithinLimits,
                 Ects = standing.Ects,
-                Status = own.Count == 0 ? "" : StatusOf(standing),
+                NationalLabel = standing.NationalLabel,
                 Warnings = warnings,
-                Cells = sessions.Select(session =>
-                {
-                    var cell = own.Where(grade => grade.SessionId == session.Id).ToList();
-                    return new RegisterCellResponse
-                    {
-                        SessionId = session.Id,
-                        Points = cell.Count == 0 ? null : cell.Sum(grade => grade.GradeValue)
-                    };
-                }).ToList()
+                Lectures = lectureCells,
+                Works = workCells,
+                Controls = controlCells
             });
         }
 
-        var scored = rows.Where(row => row.Cells.Any(cell => cell.Points is not null)).Select(row => row.Total).ToList();
+        var scored = rows.Where(row => row.ShowScores).Select(row => row.Total).ToList();
         return new RegisterResponse
         {
             SubjectId = subject.Id,
             SubjectTitle = subject.Title,
             Group = group,
-            Credits = subject.Credits,
+            Hours = sheet.Hours > 0 ? sheet.Hours : subject.Credits * 30,
+            ControlForm = sheet.ControlForm,
+            WorkTitle = string.IsNullOrWhiteSpace(sheet.WorkTitle) ? "Лабораторні" : sheet.WorkTitle,
+            CurrentProfessor = professors.FirstOrDefault(professor => professor.Id == sheet.CurrentProfessorId)?.FullName ?? "",
+            FinalProfessor = professors.FirstOrDefault(professor => professor.Id == sheet.FinalProfessorId)?.FullName ?? "",
+            Specialty = sheet.Specialty,
+            Degree = sheet.Degree,
+            Semester = sheet.Semester,
+            Finalized = sheet.Finalized,
             CurrentMax = settings.CurrentMax,
             FinalMax = settings.FinalMax,
+            PlannedCurrentMax = plannedCurrent,
             PassThreshold = settings.PassThreshold,
             CanEdit = canEdit,
-            HasFinalColumn = sessions.Any(session => GradeTypes.IsFinal(session.GradeType)),
             ClassAverage = scored.Count == 0 ? null : GradeBook.Average(scored),
             DebtCount = rows.Count(row => row.Debt),
-            Columns = sessions.Select(session => new RegisterColumnResponse
-            {
-                Id = session.Id,
-                Date = session.Date,
-                GradeType = session.GradeType,
-                MaxPoints = session.MaxPoints,
-                IsFinal = GradeTypes.IsFinal(session.GradeType)
-            }).ToList(),
+            Lectures = lectures,
+            Works = works,
+            Controls = controls,
+            Legend = controls
+                .Where(column => !string.IsNullOrWhiteSpace(column.Code))
+                .Select(column => new LegendEntryResponse
+                {
+                    Code = column.Code,
+                    Text = string.IsNullOrWhiteSpace(column.Legend) ? column.Code : column.Legend
+                })
+                .ToList(),
             Rows = rows
         };
     }
 
-    private static string StatusOf(SubjectStanding standing)
+    private static string ResolveKind(ClassSession session) =>
+        string.IsNullOrWhiteSpace(session.ColumnKind)
+            ? JournalColumns.FromGradeType(session.GradeType)
+            : session.ColumnKind;
+
+    private static List<ClassSession> Ordered(IEnumerable<ClassSession> sessions) =>
+        sessions
+            .OrderBy(session => session.Number > 0 ? session.Number : int.MaxValue)
+            .ThenBy(session => session.Date)
+            .ThenBy(session => session.Id, StringComparer.Ordinal)
+            .ToList();
+
+    private static List<RegisterColumnResponse> MapColumns(IReadOnlyList<ClassSession> sessions, bool dated)
     {
-        if (!standing.WithinLimits)
-            return "перевищення";
-        if (standing.Debt)
-            return "борг";
-        if (!standing.HasFinal)
-            return "набрано на зараз";
-        return standing.Outcome;
+        var columns = new List<RegisterColumnResponse>();
+        var fallback = 1;
+        foreach (var session in sessions)
+        {
+            var kind = ResolveKind(session);
+            var number = session.Number > 0 ? session.Number : fallback;
+            fallback++;
+            var code = session.Code?.Trim() ?? "";
+            if (kind == JournalColumns.Control && code.Length == 0)
+            {
+                code = session.GradeType switch
+                {
+                    GradeTypes.Homework => number == 1 ? "ДЗ" : $"ДЗ{number}",
+                    GradeTypes.Module => number == 1 ? "КР" : $"КР{number}",
+                    _ => $"К{number}"
+                };
+            }
+
+            columns.Add(new RegisterColumnResponse
+            {
+                Id = session.Id,
+                Kind = kind,
+                Number = number,
+                Code = code,
+                DateLabel = dated ? $"{session.Date.Day:00}.{session.Date.Month:00}" : "",
+                MaxPoints = session.MaxPoints,
+                Legend = string.IsNullOrWhiteSpace(session.Legend)
+                    ? kind == JournalColumns.Control ? session.GradeType : ""
+                    : session.Legend.Trim(),
+                AllowsAbsence = kind == JournalColumns.Lecture
+            });
+        }
+
+        return columns;
     }
+
+    private static List<RegisterCellResponse> MapCells(IReadOnlyList<ClassSession> sessions, IReadOnlyList<Grade> own)
+    {
+        return sessions.Select(session =>
+        {
+            var cell = own.Where(grade => grade.SessionId == session.Id).ToList();
+            if (cell.Count == 0)
+            {
+                return new RegisterCellResponse { SessionId = session.Id };
+            }
+
+            if (cell.All(grade => grade.Absent))
+            {
+                return new RegisterCellResponse
+                {
+                    SessionId = session.Id,
+                    Absent = true,
+                    Display = "н"
+                };
+            }
+
+            var points = cell.Where(grade => !grade.Absent).Sum(grade => grade.GradeValue);
+            return new RegisterCellResponse
+            {
+                SessionId = session.Id,
+                Points = points,
+                Display = points.ToString()
+            };
+        }).ToList();
+    }
+
+    private static ParsedMark ParseMark(string? mark, bool allowsAbsence)
+    {
+        if (string.IsNullOrWhiteSpace(mark))
+            return new ParsedMark(true, false, 0);
+        var text = mark.Trim();
+        if (text.Equals("н", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!allowsAbsence)
+                throw new AppException(400, "Позначку «н» можна ставити лише в колонках лекцій.");
+            return new ParsedMark(false, true, 0);
+        }
+
+        if (!int.TryParse(text, out var points) || points < 0)
+        {
+            throw new AppException(400, allowsAbsence
+                ? "Вкажіть ціле число або «н» для лекції."
+                : "Вкажіть ціле невід'ємне число.");
+        }
+
+        return new ParsedMark(false, false, points);
+    }
+
+    private readonly record struct ParsedMark(bool Clear, bool Absent, int Points);
 
     private async Task<(List<Student> Students, bool CanEdit)> ResolveAudienceAsync(
         Actor actor,

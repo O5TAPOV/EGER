@@ -42,7 +42,12 @@ export default function StudentCardPage() {
           />
           {activeSubjectId && (
             <div className="mt-4">
-              <Gradebook subjectId={activeSubjectId} group={card.group} studentId={card.studentId} />
+              <Gradebook
+                subjectId={activeSubjectId}
+                group={card.group}
+                studentId={card.studentId}
+                linkBase={user?.role === "Professor" ? "/professor/students" : "/admin/students"}
+              />
             </div>
           )}
         </>

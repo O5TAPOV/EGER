@@ -77,6 +77,13 @@ public class AcademicController : ControllerBase
         return Ok(await _register.SetCellAsync(HttpActor.Current(User), request, ct));
     }
 
+    [HttpPut("register/sheet")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> SetSheet([FromBody] UpdateSheetRequest request, CancellationToken ct)
+    {
+        return Ok(await _register.SetFinalizedAsync(HttpActor.Current(User), request, ct));
+    }
+
     [HttpGet("at-risk")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
     public async Task<ActionResult<AtRiskResponse>> AtRisk(CancellationToken ct)

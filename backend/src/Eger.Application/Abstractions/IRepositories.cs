@@ -81,6 +81,15 @@ public interface IClassSessionRepository
     Task EnsureIndexesAsync(CancellationToken ct = default);
 }
 
+public interface IJournalSheetRepository
+{
+    Task<JournalSheet?> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default);
+    Task CreateAsync(JournalSheet sheet, CancellationToken ct = default);
+    Task UpdateAsync(JournalSheet sheet, CancellationToken ct = default);
+    Task DeleteAllAsync(CancellationToken ct = default);
+    Task EnsureIndexesAsync(CancellationToken ct = default);
+}
+
 public interface IGradingSettingsRepository
 {
     Task<Eger.Domain.Entities.GradingSettings> GetAsync(CancellationToken ct = default);

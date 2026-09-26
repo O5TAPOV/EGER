@@ -318,6 +318,31 @@ public class ClassSessionRepository : IClassSessionRepository
             cancellationToken: ct);
 }
 
+public class JournalSheetRepository : IJournalSheetRepository
+{
+    private readonly MongoContext _context;
+    public JournalSheetRepository(MongoContext context) => _context = context;
+
+    public async Task<JournalSheet?> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default) =>
+        await _context.JournalSheets.Find(x => x.SubjectId == subjectId && x.Group == group).FirstOrDefaultAsync(ct);
+
+    public Task CreateAsync(JournalSheet sheet, CancellationToken ct = default) =>
+        UserRepository.InsertAsync(_context.JournalSheets, sheet, ct);
+
+    public Task UpdateAsync(JournalSheet sheet, CancellationToken ct = default) =>
+        UserRepository.ReplaceAsync(_context.JournalSheets, sheet.Id, sheet, ct);
+
+    public Task DeleteAllAsync(CancellationToken ct = default) =>
+        _context.JournalSheets.DeleteManyAsync(Builders<JournalSheet>.Filter.Empty, ct);
+
+    public Task EnsureIndexesAsync(CancellationToken ct = default) =>
+        _context.JournalSheets.Indexes.CreateOneAsync(
+            new CreateIndexModel<JournalSheet>(
+                Builders<JournalSheet>.IndexKeys.Ascending(x => x.SubjectId).Ascending(x => x.Group),
+                new CreateIndexOptions { Unique = true, Name = "ux_sheets_subject_group" }),
+            cancellationToken: ct);
+}
+
 public class GradingSettingsRepository : IGradingSettingsRepository
 {
     private readonly MongoContext _context;

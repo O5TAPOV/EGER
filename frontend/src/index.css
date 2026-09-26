@@ -63,152 +63,226 @@ body {
   }
 }
 
-.register-scroll {
-  --num: 46px;
-  --name: 220px;
-  --current: 96px;
-  --final: 100px;
-  --total: 84px;
-  --ects: 68px;
-  --status: 148px;
-  overflow: auto;
-  max-height: min(70vh, 760px);
-  border: 1px solid #234536;
-  border-radius: 12px;
-  background: #0c1a14;
+.official-sheet {
+  background: #fff;
+  color: #111;
+  border: 1px solid #111;
+  padding: 14px 16px 18px;
+  font-family: "Times New Roman", Times, "Liberation Serif", serif;
+  font-size: 14px;
+  line-height: 1.35;
 }
 
-.register-grid {
+.sheet-title {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.sheet-meta {
+  margin: 0;
+}
+
+.sheet-scroll {
+  overflow: auto;
+  max-height: 75vh;
+  margin-top: 10px;
+}
+
+.sheet-grid {
+  --num: 36px;
+  --name: 220px;
+  --row1: 32px;
+  --row2: 50px;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 13px;
+  width: max-content;
   min-width: 100%;
+  font-size: 11px;
+  line-height: 1.15;
 }
 
-.register-grid th,
-.register-grid td {
-  height: 34px;
-  padding: 0 6px;
-  border-right: 1px solid #234536;
-  border-bottom: 1px solid #234536;
-  background: #10241c;
+.sheet-grid th,
+.sheet-grid td {
+  box-sizing: border-box;
+  border-right: 1px solid #111;
+  border-bottom: 1px solid #111;
+  padding: 2px 3px;
+  background: #fff;
+  color: #111;
   text-align: center;
   vertical-align: middle;
+  font-weight: 400;
 }
 
-.register-grid tbody tr:nth-child(even) td {
-  background: #163028;
+.sheet-grid thead tr:first-child th {
+  border-top: 1px solid #111;
 }
 
-.register-grid thead th {
+.sheet-grid .col-num,
+.sheet-grid .col-name,
+.sheet-grid .max-label,
+.sheet-grid tbody td:first-child {
+  border-left: 1px solid #111;
+}
+
+.sheet-grid thead th {
   position: sticky;
-  top: 0;
   z-index: 4;
-  height: auto;
-  min-height: 64px;
-  padding: 6px 4px;
-  background: #0d1c16;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: #d6d3d1;
+  background: #fff;
 }
 
-.register-grid .col-num,
-.register-grid .col-name,
-.register-grid .col-current,
-.register-grid .col-final,
-.register-grid .col-total,
-.register-grid .col-ects,
-.register-grid .col-status {
+.sheet-grid thead tr:nth-child(1) th {
+  top: 0;
+}
+
+.sheet-grid thead tr:nth-child(1) th:not(.col-num):not(.col-name) {
+  height: var(--row1);
+}
+
+.sheet-grid thead tr:nth-child(2) th {
+  top: var(--row1);
+  height: var(--row2);
+}
+
+.sheet-grid thead tr.max-row th {
+  top: calc(var(--row1) + var(--row2));
+  font-weight: 700;
+}
+
+.sheet-grid .col-num,
+.sheet-grid .col-name,
+.sheet-grid .max-label {
   position: sticky;
+  background: #fff;
+}
+
+.sheet-grid tbody .col-num,
+.sheet-grid tbody .col-name {
   z-index: 2;
 }
 
-.register-grid thead .col-num,
-.register-grid thead .col-name,
-.register-grid thead .col-current,
-.register-grid thead .col-final,
-.register-grid thead .col-total,
-.register-grid thead .col-ects,
-.register-grid thead .col-status {
+.sheet-grid thead .col-num,
+.sheet-grid thead .col-name,
+.sheet-grid thead .max-label {
   z-index: 6;
 }
 
-.register-grid .col-num {
+.sheet-grid .col-num {
   left: 0;
   width: var(--num);
   min-width: var(--num);
+  max-width: var(--num);
 }
 
-.register-grid .col-name {
+.sheet-grid .col-name {
   left: var(--num);
   width: var(--name);
   min-width: var(--name);
   text-align: left;
-  box-shadow: 1px 0 0 #234536;
+  padding-left: 6px;
+  box-shadow: 1px 0 0 #111;
 }
 
-.register-grid .col-current {
-  right: calc(var(--final) + var(--total) + var(--ects) + var(--status));
-  width: var(--current);
-  min-width: var(--current);
-  box-shadow: -1px 0 0 #234536;
+.sheet-grid .max-label {
+  left: 0;
+  z-index: 6;
+  min-width: calc(var(--num) + var(--name));
+  text-align: left;
+  padding-left: 6px;
+  box-shadow: 1px 0 0 #111;
 }
 
-.register-grid .col-final {
-  right: calc(var(--total) + var(--ects) + var(--status));
-  width: var(--final);
-  min-width: var(--final);
+.sheet-grid .group-col,
+.sheet-grid .sum-col {
+  font-weight: 700;
 }
 
-.register-grid .col-total {
-  right: calc(var(--ects) + var(--status));
-  width: var(--total);
-  min-width: var(--total);
+.sheet-grid .lesson-col {
+  width: 36px;
+  min-width: 36px;
+  padding: 1px 2px;
 }
 
-.register-grid .col-ects {
-  right: var(--status);
-  width: var(--ects);
-  min-width: var(--ects);
+.sheet-grid .lesson-date {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
 }
 
-.register-grid .col-status {
-  right: 0;
-  width: var(--status);
-  min-width: var(--status);
-}
-
-.register-grid .lesson-col {
-  width: 118px;
-  min-width: 118px;
+.sheet-grid .sum-col {
+  width: 84px;
+  min-width: 84px;
+  max-width: 96px;
   white-space: normal;
 }
 
-.register-cell-button,
-.register-cell-input,
-.register-cell-value {
-  display: block;
-  width: 100%;
-  height: 32px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: center;
-  font: inherit;
-  line-height: 32px;
+.sheet-grid a.sheet-name {
+  color: #111;
+  text-decoration: underline;
 }
 
-.register-cell-button {
+.sheet-cell-button,
+.sheet-cell-input,
+.sheet-cell-value {
+  display: block;
+  width: 100%;
+  min-height: 16px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: #111;
+  text-align: center;
+  font: inherit;
+  line-height: 1.2;
+  padding: 0;
+}
+
+.sheet-cell-button {
   cursor: text;
 }
 
-.register-cell-input {
-  outline: none;
-  box-shadow: inset 0 0 0 2px #e3b15a;
+.sheet-cell-input {
+  outline: 1px solid #111;
+  background: #fff;
 }
 
-.register-grid td.is-editing {
-  box-shadow: inset 0 0 0 2px #e3b15a;
+.sheet-grid td.is-debt {
+  background: #f3f3f3;
+}
+
+.sheet-grid td.is-over {
+  color: #9b1c1c;
+  font-weight: 700;
+}
+
+.sheet-legend {
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.sheet-legend h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.sheet-legend ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sheet-finalized {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 14px;
+}
+
+.sheet-finalized input {
+  width: 14px;
+  height: 14px;
+  accent-color: #111;
 }
