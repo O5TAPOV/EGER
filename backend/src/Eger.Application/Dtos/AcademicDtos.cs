@@ -37,6 +37,8 @@ public class SubjectScoreResponse
     public bool Debt { get; set; }
     public bool CannotReach { get; set; }
     public bool WithinLimits { get; set; }
+    public bool HasMarks { get; set; }
+    public int AbsenceCount { get; set; }
     public List<string> Warnings { get; set; } = [];
     public string? Ects { get; set; }
     public int? NationalScore { get; set; }
@@ -275,6 +277,18 @@ public class UpdateSheetRequest
     public string Group { get; set; } = "";
 
     public bool Finalized { get; set; }
+}
+
+public class UpdateControlFormRequest
+{
+    [Required(ErrorMessage = "Дисципліна обов'язкова")]
+    public string SubjectId { get; set; } = "";
+
+    [Required(ErrorMessage = "Група обов'язкова")]
+    public string Group { get; set; } = "";
+
+    [Required(ErrorMessage = "Оберіть форму контролю")]
+    public string ControlForm { get; set; } = "";
 }
 
 public class UpdateColumnDateRequest

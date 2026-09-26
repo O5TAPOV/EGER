@@ -109,6 +109,20 @@ public class AcademicController : ControllerBase
         return Ok(await _register.UpdateLegendAsync(HttpActor.Current(User), request, ct));
     }
 
+    [HttpGet("register/groups")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<IReadOnlyList<string>>> RegisterGroups([FromQuery] string subjectId, CancellationToken ct)
+    {
+        return Ok(await _register.GroupsForSubjectAsync(HttpActor.Current(User), subjectId, ct));
+    }
+
+    [HttpPut("register/control-form")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> SetControlForm([FromBody] UpdateControlFormRequest request, CancellationToken ct)
+    {
+        return Ok(await _register.SetControlFormAsync(HttpActor.Current(User), request, ct));
+    }
+
     [HttpPut("register/sheet")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
     public async Task<ActionResult<RegisterResponse>> SetSheet([FromBody] UpdateSheetRequest request, CancellationToken ct)

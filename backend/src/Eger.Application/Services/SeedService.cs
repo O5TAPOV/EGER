@@ -90,13 +90,13 @@ public class SeedService
         var shevchenko = await AddProfessorAsync("maria.shevchenko@eger.ua", "Шевченко Марія Василівна", "Кафедра інформаційних систем", "Кандидат технічних наук", ct);
         var bondarenko = await AddProfessorAsync("ihor.bondarenko@eger.ua", "Бондаренко Ігор Олександрович", "Кафедра комп'ютерних наук", "Доцент", ct);
 
-        await AddSubjectAsync("Теорія баз даних", 5, [kovalenko.Id], ct);
-        await AddSubjectAsync("Алгоритми та структури даних", 6, [kovalenko.Id, bondarenko.Id], ct);
-        await AddSubjectAsync("Веб-технології", 4, [bondarenko.Id], ct);
-        await AddSubjectAsync("Операційні системи", 5, [melnyk.Id], ct);
-        await AddSubjectAsync("Дискретна математика", 4, [shevchenko.Id], ct);
-        await AddSubjectAsync("Комп'ютерні мережі", 4, [melnyk.Id], ct);
-        await AddSubjectAsync("Проєктування інформаційних систем", 5, [shevchenko.Id], ct);
+        await AddSubjectAsync("Теорія баз даних", 5, [kovalenko.Id], "Екзамен", ct);
+        await AddSubjectAsync("Алгоритми та структури даних", 6, [kovalenko.Id, bondarenko.Id], "Екзамен", ct);
+        await AddSubjectAsync("Веб-технології", 4, [bondarenko.Id], "Залік", ct);
+        await AddSubjectAsync("Операційні системи", 5, [melnyk.Id], "Екзамен", ct);
+        await AddSubjectAsync("Дискретна математика", 4, [shevchenko.Id], "Екзамен", ct);
+        await AddSubjectAsync("Комп'ютерні мережі", 4, [melnyk.Id], "Екзамен", ct);
+        await AddSubjectAsync("Проєктування інформаційних систем", 5, [shevchenko.Id], "Екзамен", ct);
 
         await AddStudentAsync("anton.ostapov@eger.ua", DemoStudentName, "КН-21", "KN-21015", 2021, ct);
         await AddStudentAsync("daryna.kozak@eger.ua", "Козак Дарина Олегівна", "КН-21", "KN-21008", 2021, ct);
@@ -345,13 +345,14 @@ public class SeedService
         return student;
     }
 
-    private async Task<Subject> AddSubjectAsync(string title, int credits, List<string> professorIds, CancellationToken ct)
+    private async Task<Subject> AddSubjectAsync(string title, int credits, List<string> professorIds, string controlForm, CancellationToken ct)
     {
         var subject = new Subject
         {
             Title = title,
             Credits = credits,
-            ProfessorIds = professorIds
+            ProfessorIds = professorIds,
+            ControlForm = controlForm
         };
         await _subjects.CreateAsync(subject, ct);
         return subject;

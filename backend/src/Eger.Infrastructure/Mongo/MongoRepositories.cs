@@ -307,6 +307,26 @@ public class ClassSessionRepository : IClassSessionRepository
     public async Task<IReadOnlyList<ClassSession>> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default) =>
         await _context.ClassSessions.Find(x => x.SubjectId == subjectId && x.Group == group).ToListAsync(ct);
 
+    public async Task<IReadOnlyList<string>> GetGroupsBySubjectAsync(string subjectId, CancellationToken ct = default)
+    {
+        var sessions = await _context.ClassSessions.Find(x => x.SubjectId == subjectId).ToListAsync(ct);
+        return sessions
+            .Select(session => session.Group)
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<string>> GetSubjectIdsByGroupAsync(string group, CancellationToken ct = default)
+    {
+        var sessions = await _context.ClassSessions.Find(x => x.Group == group).ToListAsync(ct);
+        return sessions
+            .Select(session => session.SubjectId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
     public Task CreateAsync(ClassSession session, CancellationToken ct = default) =>
         UserRepository.InsertAsync(_context.ClassSessions, session, ct);
 

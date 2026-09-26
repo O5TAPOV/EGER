@@ -52,7 +52,8 @@ public class SubjectService
         {
             Title = request.Title.Trim(),
             ProfessorIds = professorIds,
-            Credits = request.Credits
+            Credits = request.Credits,
+            ControlForm = NormalizeControlForm(request.ControlForm)
         };
         await _subjects.CreateAsync(subject, ct);
         var mapped = await MapManyAsync([subject], ct);
@@ -67,6 +68,7 @@ public class SubjectService
         subject.Title = request.Title.Trim();
         subject.ProfessorIds = await NormalizeProfessorsAsync(request.ProfessorIds, ct);
         subject.Credits = request.Credits;
+        subject.ControlForm = NormalizeControlForm(request.ControlForm);
         await _subjects.UpdateAsync(subject, ct);
         var mapped = await MapManyAsync([subject], ct);
         return mapped[0];
@@ -103,6 +105,16 @@ public class SubjectService
         return distinct;
     }
 
+    private static string NormalizeControlForm(string? value)
+    {
+        var text = value?.Trim() ?? "";
+        if (text.Length == 0)
+            return "Екзамен";
+        if (text is not ("Залік" or "Екзамен"))
+            throw new AppException(400, "Форма контролю має бути «Залік» або «Екзамен».");
+        return text;
+    }
+
     private async Task<List<SubjectResponse>> MapManyAsync(IReadOnlyList<Subject> subjects, CancellationToken ct)
     {
         var ids = subjects.SelectMany(s => s.ProfessorIds).Distinct();
@@ -117,7 +129,8 @@ public class SubjectService
                 Title = s.Title,
                 Credits = s.Credits,
                 ProfessorIds = s.ProfessorIds,
-                ProfessorNames = s.ProfessorIds.Select(id => names.TryGetValue(id, out var name) ? name : "—").ToList()
+                ProfessorNames = s.ProfessorIds.Select(id => names.TryGetValue(id, out var name) ? name : "—").ToList(),
+                ControlForm = s.ControlForm is "Залік" or "Екзамен" ? s.ControlForm : ""
             })
             .ToList();
     }

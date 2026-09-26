@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { BookOpen, Pencil, Plus, Sprout, Trash2, Users } from "lucide-react";
 import { api, errorText } from "../api/client";
+import DarkSelect from "../components/DarkSelect";
 import Layout from "../components/Layout";
 import Modal, { Field } from "../components/Modal";
 import { useToast } from "../context/ToastContext";
@@ -26,6 +27,7 @@ const emptyProfessor = {
 const emptySubject = {
   title: "",
   credits: 4,
+  controlForm: "Екзамен",
   professorIds: [],
 };
 
@@ -102,6 +104,7 @@ export default function AdminDashboard() {
         const payload = {
           title: editor.form.title,
           credits: Number(editor.form.credits),
+          controlForm: editor.form.controlForm || "Екзамен",
           professorIds: editor.form.professorIds,
         };
         if (editor.id) await api.put(`/subjects/${editor.id}`, payload);
@@ -256,10 +259,11 @@ export default function AdminDashboard() {
         >
           <Rows
             empty="Дисциплін ще немає"
-            headers={["Назва", "Кредити", "Викладачі", ""]}
+            headers={["Назва", "Кредити", "Контроль", "Викладачі", ""]}
             rows={subjects.map((item) => [
               item.title,
               item.credits,
+              item.controlForm || "Екзамен",
               item.professorNames.join(", ") || "—",
               <RowActions
                 key={item.id}
@@ -270,6 +274,7 @@ export default function AdminDashboard() {
                     form: {
                       title: item.title,
                       credits: item.credits,
+                      controlForm: item.controlForm || "Екзамен",
                       professorIds: [...item.professorIds],
                     },
                   })
@@ -359,6 +364,16 @@ export default function AdminDashboard() {
                 </Field>
                 <Field label="Кредити">
                   <input className="field" type="number" min="1" max="15" required value={editor.form.credits} onChange={(e) => patch(setEditor, "credits", e.target.value)} />
+                </Field>
+                <Field label="Форма контролю">
+                  <DarkSelect
+                    value={editor.form.controlForm || "Екзамен"}
+                    onChange={(value) => patch(setEditor, "controlForm", value)}
+                    options={[
+                      { value: "Екзамен", label: "Екзамен" },
+                      { value: "Залік", label: "Залік" },
+                    ]}
+                  />
                 </Field>
                 <fieldset>
                   <legend className="label">Викладачі</legend>

@@ -77,6 +77,8 @@ public interface IClassSessionRepository
 {
     Task<ClassSession?> GetByIdAsync(string id, CancellationToken ct = default);
     Task<IReadOnlyList<ClassSession>> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetGroupsBySubjectAsync(string subjectId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetSubjectIdsByGroupAsync(string group, CancellationToken ct = default);
     Task CreateAsync(ClassSession session, CancellationToken ct = default);
     Task UpdateAsync(ClassSession session, CancellationToken ct = default);
     Task DeleteAsync(string id, CancellationToken ct = default);

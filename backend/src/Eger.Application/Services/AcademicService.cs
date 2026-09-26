@@ -13,6 +13,7 @@ public class AcademicService
     private readonly IProfessorRepository _professors;
     private readonly ISubjectRepository _subjects;
     private readonly IGradeRepository _grades;
+    private readonly IClassSessionRepository _sessions;
     private readonly IGradingSettingsRepository _settings;
 
     public AcademicService(
@@ -20,12 +21,14 @@ public class AcademicService
         IProfessorRepository professors,
         ISubjectRepository subjects,
         IGradeRepository grades,
+        IClassSessionRepository sessions,
         IGradingSettingsRepository settings)
     {
         _students = students;
         _professors = professors;
         _subjects = subjects;
         _grades = grades;
+        _sessions = sessions;
         _settings = settings;
     }
 
@@ -225,14 +228,19 @@ public class AcademicService
         var settings = await _settings.GetAsync(ct);
         var grades = await _grades.GetByStudentAsync(student.Id, ct);
         var subjects = await _subjects.GetAllAsync(ct);
+        var taughtIds = (await _sessions.GetSubjectIdsByGroupAsync(student.Group, ct)).ToHashSet(StringComparer.Ordinal);
+        foreach (var subjectId in grades.Select(grade => grade.SubjectId))
+            taughtIds.Add(subjectId);
         var subjectMap = subjects.ToDictionary(subject => subject.Id);
         var scores = new List<SubjectScoreResponse>();
 
-        foreach (var group in grades.GroupBy(grade => grade.SubjectId).OrderBy(group => subjectMap.GetValueOrDefault(group.Key)?.Title))
+        foreach (var subjectId in taughtIds.OrderBy(id => subjectMap.GetValueOrDefault(id)?.Title ?? "", StringComparer.CurrentCulture))
         {
-            if (!subjectMap.TryGetValue(group.Key, out var subject))
+            if (!subjectMap.TryGetValue(subjectId, out var subject))
                 continue;
-            var standing = GradeBook.Evaluate(group.ToList(), settings);
+            var own = grades.Where(grade => grade.SubjectId == subject.Id).ToList();
+            var standing = GradeBook.Evaluate(own, settings);
+            var hasMarks = own.Any(grade => !grade.Absent);
             var names = await ProfessorNameMapAsync(subject.ProfessorIds, ct);
             scores.Add(new SubjectScoreResponse
             {
@@ -242,23 +250,25 @@ public class AcademicService
                 ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList(),
                 CurrentPoints = standing.CurrentPoints,
                 CurrentMax = settings.CurrentMax,
-                FinalPoints = standing.FinalPoints,
+                FinalPoints = standing.HasFinal ? standing.FinalPoints : null,
                 FinalMax = settings.FinalMax,
                 FinalType = standing.FinalType,
                 Total = standing.Total,
                 HasFinal = standing.HasFinal,
-                Debt = standing.Debt,
-                CannotReach = standing.CannotReach,
-                Ects = standing.Ects,
-                NationalScore = standing.NationalScore,
-                NationalLabel = standing.NationalLabel,
-                Outcome = standing.Outcome,
+                Debt = hasMarks && standing.Debt,
+                CannotReach = hasMarks && standing.CannotReach,
+                Ects = hasMarks ? standing.Ects : null,
+                NationalScore = hasMarks ? standing.NationalScore : null,
+                NationalLabel = hasMarks ? standing.NationalLabel : null,
+                Outcome = hasMarks ? standing.Outcome : "",
                 WithinLimits = standing.WithinLimits,
-                Warnings = PointGuard.Describe(student.FullName, standing, settings)
+                HasMarks = hasMarks,
+                AbsenceCount = own.Count(grade => grade.Absent),
+                Warnings = hasMarks ? PointGuard.Describe(student.FullName, standing, settings) : []
             });
         }
 
-        var validTotals = scores.Where(score => score.WithinLimits).Select(score => score.Total).ToList();
+        var validTotals = scores.Where(score => score.HasMarks && score.WithinLimits).Select(score => score.Total).ToList();
         return new StudentCardResponse
         {
             StudentId = student.Id,

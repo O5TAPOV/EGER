@@ -186,6 +186,8 @@ public class SubjectRequest
 
     public List<string> ProfessorIds { get; set; } = [];
 
+    public string? ControlForm { get; set; }
+
     [Range(1, 15, ErrorMessage = "Кількість кредитів має бути від 1 до 15")]
     public int Credits { get; set; }
 }
@@ -197,6 +199,7 @@ public class SubjectResponse
     public List<string> ProfessorIds { get; set; } = [];
     public List<string> ProfessorNames { get; set; } = [];
     public int Credits { get; set; }
+    public string ControlForm { get; set; } = "";
 }
 
 public class GradeRequest

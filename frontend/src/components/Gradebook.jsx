@@ -12,6 +12,11 @@ const COLUMN_KINDS = [
   { value: "Контроль", label: "Контроль" },
 ];
 
+const CONTROL_FORMS = [
+  { value: "Залік", label: "Залік" },
+  { value: "Екзамен", label: "Екзамен" },
+];
+
 function parsedMark(mark) {
   if (mark == null || String(mark).trim() === "") return { empty: true, absent: false, points: null };
   const text = String(mark).trim();
@@ -147,6 +152,12 @@ function findCell(cells, column) {
   return cells?.find((cell) => cell.sessionId === column.id) ?? { display: "", points: null, absent: false };
 }
 
+function missedCount(row) {
+  return [row.lectures, row.works, row.controls]
+    .flat()
+    .filter((cell) => cell?.absent).length;
+}
+
 function columnDeleteLabel(column) {
   const name = column.code ? `${column.kind} ${column.code}` : `${column.kind} ${column.number}`;
   return column.dateLabel ? `${name}, ${column.dateLabel}` : name;
@@ -204,6 +215,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
   const [legendDraft, setLegendDraft] = useState([]);
   const [busy, setBusy] = useState(false);
   const requestRef = useRef(0);
+  const replaceLegend = useRef(false);
 
   const load = async () => {
     if (!subjectId) return;
@@ -226,11 +238,20 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
 
   useEffect(() => {
     if (!register) return;
-    setLegendDraft((register.legend || []).map((item) => ({
+    const saved = (register.legend || []).map((item) => ({
       previousCode: item.code,
       code: item.code,
       text: item.text,
-    })));
+    }));
+    if (replaceLegend.current) {
+      replaceLegend.current = false;
+      setLegendDraft(saved);
+      return;
+    }
+    setLegendDraft((current) => {
+      const pending = current.filter((item) => !item.previousCode);
+      return [...saved, ...pending];
+    });
   }, [register]);
 
   useEffect(() => {
@@ -245,7 +266,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
     if (!register) return;
     if (mark === undefined) {
       const text = allowsAbsence
-        ? "Вкажіть ціле число або «н» для лекції."
+        ? "Вкажіть ціле число або «н»."
         : "Вкажіть ціле невід'ємне число.";
       setBlocked(text);
       push(text, "error");
@@ -285,6 +306,24 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
       const text = errorText(error, "Не вдалося зберегти бал");
       setBlocked(text);
       push(text, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setControlForm = async (controlForm) => {
+    if (!register || controlForm === register.controlForm) return;
+    setBusy(true);
+    try {
+      const { data } = await api.put("/academic/register/control-form", {
+        subjectId: register.subjectId,
+        group: register.group,
+        controlForm,
+      });
+      replaceLegend.current = true;
+      setRegister(data);
+    } catch (error) {
+      push(errorText(error, "Не вдалося змінити форму контролю"), "error");
     } finally {
       setBusy(false);
     }
@@ -386,7 +425,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
     }
     setBusy(true);
     try {
-      await api.put("/academic/register/legend", {
+      const { data } = await api.put("/academic/register/legend", {
         subjectId: register.subjectId,
         group: register.group,
         entries: meaningful.map((item) => ({
@@ -396,7 +435,8 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
         })),
       });
       setBlocked("");
-      await load();
+      replaceLegend.current = true;
+      setRegister(data);
       push(successText);
     } catch (error) {
       const text = errorText(error, "Не вдалося зберегти позначення");
@@ -471,9 +511,23 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
 
       <div>
         <h2 className="text-lg font-semibold">{register.subjectTitle}</h2>
-        <p className="text-sm text-stone-400">
-          {register.hours} год · {register.controlForm} · {register.specialty}, {register.degree} · група {register.group} · семестр {register.semester}
-        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <p className="text-sm text-stone-400">
+            {register.hours} год · {register.specialty}, {register.degree} · група {register.group} · семестр {register.semester}
+          </p>
+          {editable ? (
+            <Field label="Форма контролю">
+              <DarkSelect
+                className="w-40"
+                value={register.controlForm === "Залік" ? "Залік" : "Екзамен"}
+                onChange={setControlForm}
+                options={CONTROL_FORMS}
+              />
+            </Field>
+          ) : (
+            <p className="text-sm text-stone-400">{register.controlForm}</p>
+          )}
+        </div>
         <p className="text-sm text-stone-400">
           Поточний контроль: {register.currentProfessor} · Підсумок: {register.finalProfessor}
         </p>
@@ -538,6 +592,9 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                       ) : (
                         row.fullName
                       )}
+                      {missedCount(row) > 0 && (
+                        <span className="sheet-missed">Пропущено занять: {missedCount(row)}</span>
+                      )}
                       {editable && (
                         <button type="button" className="sheet-row-delete" onClick={() => hideStudent(row)}>
                           Прибрати з відомості
@@ -547,12 +604,12 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                     {lectures.map((column) => {
                       const cell = findCell(row.lectures, column);
                       return (
-                        <td key={column.id}>
+                        <td key={column.id} className={cell.absent ? "is-absent" : undefined}>
                           <SheetCell
                             display={cell.display}
-                            allowsAbsence
+                            allowsAbsence={column.allowsAbsence}
                             readOnly={!editable}
-                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: true })}
+                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: column.allowsAbsence })}
                           />
                         </td>
                       );
@@ -560,11 +617,12 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                     {labs.map((column) => {
                       const cell = findCell(row.works, column);
                       return (
-                        <td key={column.id}>
+                        <td key={column.id} className={cell.absent ? "is-absent" : undefined}>
                           <SheetCell
                             display={cell.display}
+                            allowsAbsence={column.allowsAbsence}
                             readOnly={!editable}
-                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: false })}
+                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: column.allowsAbsence })}
                           />
                         </td>
                       );
@@ -572,11 +630,12 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                     {practicals.map((column) => {
                       const cell = findCell(row.works, column);
                       return (
-                        <td key={column.id}>
+                        <td key={column.id} className={cell.absent ? "is-absent" : undefined}>
                           <SheetCell
                             display={cell.display}
+                            allowsAbsence={column.allowsAbsence}
                             readOnly={!editable}
-                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: false })}
+                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: column.allowsAbsence })}
                           />
                         </td>
                       );
@@ -584,11 +643,12 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                     {controls.map((column) => {
                       const cell = findCell(row.controls, column);
                       return (
-                        <td key={column.id}>
+                        <td key={column.id} className={cell.absent ? "is-absent" : undefined}>
                           <SheetCell
                             display={cell.display}
+                            allowsAbsence={column.allowsAbsence}
                             readOnly={!editable}
-                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: false })}
+                            onCommit={(mark) => saveCell(row, { sessionId: column.id, mark, allowsAbsence: column.allowsAbsence })}
                           />
                         </td>
                       );
@@ -683,15 +743,17 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
         )}
       </section>
 
-      <label className="sheet-finalized">
-        <input
-          type="checkbox"
-          checked={Boolean(register.finalized)}
-          disabled={!register.canEdit || busy}
-          onChange={(event) => setFinalized(event.target.checked)}
-        />
-        Журнал заповнений остаточно
-      </label>
+      {register.canEdit && (
+        <label className="sheet-finalized">
+          <input
+            type="checkbox"
+            checked={Boolean(register.finalized)}
+            disabled={busy}
+            onChange={(event) => setFinalized(event.target.checked)}
+          />
+          Журнал заповнений остаточно
+        </label>
+      )}
 
       {allowColumn && register.canEdit && (
         <form className="flex flex-wrap items-end gap-3" onSubmit={addColumn}>

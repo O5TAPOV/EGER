@@ -72,6 +72,34 @@ public class RegisterService
         return await BuildAsync(subject, group, students, canEdit: true, omitHidden: true, ct);
     }
 
+    public async Task<IReadOnlyList<string>> GroupsForSubjectAsync(Actor actor, string subjectId, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        var subject = await RequireSubjectAsync(subjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        var groups = await _sessions.GetGroupsBySubjectAsync(subject.Id, ct);
+        return groups
+            .OrderBy(group => group, StringComparer.CurrentCulture)
+            .ToList();
+    }
+
+    public async Task<RegisterResponse> SetControlFormAsync(Actor actor, UpdateControlFormRequest request, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+        var form = NormalizeControlForm(request.ControlForm);
+        var subject = await RequireSubjectAsync(request.SubjectId, ct);
+        await EnsureTeachesAsync(actor, subject, ct);
+        var group = request.Group.Trim();
+        subject.ControlForm = form;
+        await _subjects.UpdateAsync(subject, ct);
+        var sheet = await EnsureSheetAsync(subject, group, ct);
+        sheet.ControlForm = form;
+        await _sheets.UpdateAsync(sheet, ct);
+        return await BuildGroupAsync(subject, group, ct);
+    }
+
     public async Task<RegisterResponse> AddColumnAsync(Actor actor, AddColumnRequest request, CancellationToken ct = default)
     {
         if (actor.Role == Roles.Student)
@@ -112,6 +140,7 @@ public class RegisterService
             sheet.Legend ??= [];
             if (!sheet.Legend.Any(item => string.Equals(item.Code, code, StringComparison.OrdinalIgnoreCase)))
                 sheet.Legend.Add(new SheetLegend { Code = code, Text = legend });
+            sheet.RemovedLegendCodes?.RemoveAll(item => string.Equals(item, code, StringComparison.OrdinalIgnoreCase));
             await _sheets.UpdateAsync(sheet, ct);
         }
 
@@ -234,7 +263,19 @@ public class RegisterService
             stored.Add(new SheetLegend { Code = code, Text = text });
         }
 
+        var removed = new HashSet<string>(sheet.RemovedLegendCodes ?? [], StringComparer.OrdinalIgnoreCase);
+        foreach (var code in seen)
+            removed.Remove(code);
+        foreach (var session in sessions)
+        {
+            var code = session.Code?.Trim() ?? "";
+            if (code.Length == 0 || seen.Contains(code))
+                continue;
+            removed.Add(code);
+        }
+
         sheet.Legend = stored;
+        sheet.RemovedLegendCodes = removed.ToList();
         sheet.LegendCustomized = true;
         await _sheets.UpdateAsync(sheet, ct);
         return await BuildGroupAsync(subject, group, ct);
@@ -273,8 +314,7 @@ public class RegisterService
             return await BuildGroupAsync(lessonSubject, session.Group, ct);
         }
 
-        var kind = ResolveKind(session);
-        var parsed = ParseMark(request.Mark, kind == JournalColumns.Lecture);
+        var parsed = ParseMark(request.Mark, allowsAbsence: true);
         var own = (await _grades.GetByStudentAsync(lessonStudent.Id, ct))
             .Where(grade => grade.SubjectId == lessonSubject.Id)
             .ToList();
@@ -424,7 +464,7 @@ public class RegisterService
         }
 
         var sheet = await EnsureSheetAsync(subject, student.Group, ct);
-        var gradeType = sheet.ControlForm == "Залік" ? GradeTypes.Credit : GradeTypes.Exam;
+        var gradeType = EffectiveControlForm(subject, sheet) == "Залік" ? GradeTypes.Credit : GradeTypes.Exam;
         var settings = await _settings.GetAsync(ct);
         var others = own.Where(grade => !GradeTypes.IsFinal(grade.GradeType)).ToList();
         var preview = new List<Grade>(others)
@@ -579,7 +619,7 @@ public class RegisterService
             SubjectTitle = subject.Title,
             Group = group,
             Hours = sheet.Hours > 0 ? sheet.Hours : subject.Credits * 30,
-            ControlForm = sheet.ControlForm,
+            ControlForm = EffectiveControlForm(subject, sheet),
             WorkTitle = string.IsNullOrWhiteSpace(sheet.WorkTitle) ? "Лабораторні" : sheet.WorkTitle,
             CurrentProfessor = professors.FirstOrDefault(professor => professor.Id == sheet.CurrentProfessorId)?.FullName ?? "",
             FinalProfessor = professors.FirstOrDefault(professor => professor.Id == sheet.FinalProfessorId)?.FullName ?? "",
@@ -600,6 +640,23 @@ public class RegisterService
             Legend = MergeLegend(sheet, controls),
             Rows = rows
         };
+    }
+
+    private static string NormalizeControlForm(string? value)
+    {
+        var text = value?.Trim() ?? "";
+        if (text is not ("Залік" or "Екзамен"))
+            throw new AppException(400, "Форма контролю має бути «Залік» або «Екзамен».");
+        return text;
+    }
+
+    private static string EffectiveControlForm(Subject subject, JournalSheet sheet)
+    {
+        if (subject.ControlForm is "Залік" or "Екзамен")
+            return subject.ControlForm;
+        if (sheet.ControlForm is "Залік" or "Екзамен")
+            return sheet.ControlForm;
+        return "Екзамен";
     }
 
     private static DateTime NextLessonDate(IEnumerable<ClassSession> sessions, string kind)
@@ -632,12 +689,10 @@ public class RegisterService
             result.Add(new LegendEntryResponse { Code = code, Text = text });
         }
 
-        if (sheet.LegendCustomized)
-            return result;
-
+        var removed = new HashSet<string>(sheet.RemovedLegendCodes ?? [], StringComparer.OrdinalIgnoreCase);
         foreach (var column in controls)
         {
-            if (string.IsNullOrWhiteSpace(column.Code) || !seen.Add(column.Code))
+            if (string.IsNullOrWhiteSpace(column.Code) || removed.Contains(column.Code) || !seen.Add(column.Code))
                 continue;
             result.Add(new LegendEntryResponse
             {
@@ -709,7 +764,7 @@ public class RegisterService
                 Legend = string.IsNullOrWhiteSpace(session.Legend)
                     ? kind == JournalColumns.Control ? session.GradeType : ""
                     : session.Legend.Trim(),
-                AllowsAbsence = kind == JournalColumns.Lecture
+                AllowsAbsence = true
             });
         }
 
@@ -754,14 +809,14 @@ public class RegisterService
         if (text.Equals("н", StringComparison.OrdinalIgnoreCase))
         {
             if (!allowsAbsence)
-                throw new AppException(400, "Позначку «н» можна ставити лише в колонках лекцій.");
+                throw new AppException(400, "Позначку «н» можна ставити в колонках занять.");
             return new ParsedMark(false, true, 0);
         }
 
         if (!int.TryParse(text, out var points) || points < 0)
         {
             throw new AppException(400, allowsAbsence
-                ? "Вкажіть ціле число або «н» для лекції."
+                ? "Вкажіть ціле число або «н»."
                 : "Вкажіть ціле невід'ємне число.");
         }
 
