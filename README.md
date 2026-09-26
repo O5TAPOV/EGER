@@ -6,10 +6,18 @@
 
 ## Запуск
 
-```bash
-cp .env.example .env
+Команда `docker` з’являється лише після встановлення [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/). На Windows під час інсталяції залиш WSL 2, запусти Docker Desktop і дочекайся статусу **Running**. Потім закрий термінал і відкрий новий, інакше PowerShell напише, що `docker` не розпізнано.
+
+Запускати з кореня репозиторію — там, де лежить `docker-compose.yml`. Якщо цього файлу немає, ти не на гілці з застосунком:
+
+```powershell
+git fetch origin
+git checkout cursor/eger-full-stack-81c7
+copy .env.example .env
 docker compose up --build
 ```
+
+На macOS і Linux те саме, лише `cp .env.example .env` замість `copy`. Перший запуск довгий: тягнуться образи MongoDB, Redis, .NET і Node. Коли бекенд стане healthy, відкрий http://localhost:8080 і увійди як `admin@eger.ua` / `Admin123!`.
 
 - Інтерфейс: http://localhost:8080
 - Swagger: http://localhost:5080/swagger (також проксується з http://localhost:8080/swagger)
