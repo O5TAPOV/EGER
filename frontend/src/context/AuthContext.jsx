@@ -55,6 +55,11 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const sendCode = async (userId, channel) => {
+    const { data } = await api.post("/auth/2fa/send", { userId, channel });
+    return data;
+  };
+
   const verify = async (userId, code) => {
     const { data } = await api.post("/auth/verify-2fa", { userId, code });
     persistSession(data);
@@ -81,7 +86,7 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ user, ready, login, verify, logout, refresh }),
+    () => ({ user, ready, login, verify, sendCode, logout, refresh }),
     [user, ready]
   );
 

@@ -7,7 +7,7 @@ import { pathForRole, useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
 export default function LoginPage() {
-  const { user, ready, login, verify } = useAuth();
+  const { user, ready, login, verify, sendCode } = useAuth();
   const navigate = useNavigate();
   const { push } = useToast();
   const [email, setEmail] = useState("");
@@ -32,7 +32,7 @@ export default function LoginPage() {
     try {
       const data = await login(email.trim(), password);
       if (data.requires2FA) {
-        setPending({ userId: data.userId, message: data.message });
+        setPending({ userId: data.userId, phase: "choose", message: data.message || "" });
         setCode("");
         return;
       }
@@ -40,6 +40,20 @@ export default function LoginPage() {
       navigate(pathForRole(data.user.role), { replace: true });
     } catch (err) {
       setError(errorText(err, "Не вдалося увійти"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSend = async (channel) => {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await sendCode(pending.userId, channel);
+      setPending({ userId: pending.userId, phase: "code", message: data.message || "" });
+      setCode("");
+    } catch (err) {
+      setError(errorText(err, "Не вдалося надіслати код"));
     } finally {
       setBusy(false);
     }
@@ -124,34 +138,58 @@ export default function LoginPage() {
       </section>
 
       {pending && (
-        <Modal title="Код із Telegram" onClose={() => { setPending(null); setError(""); }}>
-          <form onSubmit={onVerify} className="space-y-4">
-            <p className="text-sm text-stone-300">
-              {pending.message || "Введіть 6-значний код, надісланий у Telegram."}
-            </p>
-            <Field label="Код підтвердження">
-              <input
-                className="field tracking-[0.4em]"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="\d{6}"
-                maxLength={6}
-                required
-                value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="000000"
-              />
-            </Field>
-            {error && <p className="text-sm text-red-300">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <button type="button" className="btn-ghost" onClick={() => { setPending(null); setError(""); }}>
-                Скасувати
-              </button>
-              <button type="submit" className="btn-primary" disabled={busy || code.length !== 6}>
-                Підтвердити
-              </button>
+        <Modal title="Підтвердження входу" onClose={() => { setPending(null); setError(""); }}>
+          {pending.phase === "code" ? (
+            <form onSubmit={onVerify} className="space-y-4">
+              <p className="text-sm text-stone-300">
+                {pending.message || "Введіть 6-значний код. Діє лише останній надісланий код."}
+              </p>
+              <Field label="Код підтвердження">
+                <input
+                  className="field tracking-[0.4em]"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  required
+                  value={code}
+                  onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="000000"
+                />
+              </Field>
+              {error && <p className="text-sm text-red-300">{error}</p>}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => { setPending({ ...pending, phase: "choose" }); setError(""); setCode(""); }}
+                >
+                  Інший канал
+                </button>
+                <button type="submit" className="btn-primary" disabled={busy || code.length !== 6}>
+                  Підтвердити
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-stone-300">
+                Оберіть, куди надіслати 6-значний код. Діє лише останній надісланий код, 5 хвилин.
+              </p>
+              {error && <p className="text-sm text-red-300">{error}</p>}
+              <div className="flex flex-col gap-2">
+                <button type="button" className="btn-primary" disabled={busy} onClick={() => onSend("telegram")}>
+                  Надіслати код у Telegram
+                </button>
+                <button type="button" className="btn-primary" disabled={busy} onClick={() => onSend("email")}>
+                  Надіслати код на пошту
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => { setPending(null); setError(""); }}>
+                  Скасувати
+                </button>
+              </div>
             </div>
-          </form>
+          )}
         </Modal>
       )}
     </div>

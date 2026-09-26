@@ -21,6 +21,7 @@ docker compose up --build
 
 - Інтерфейс: http://localhost:8080
 - Swagger: http://localhost:5080/swagger (також проксується з http://localhost:8080/swagger)
+- Пошта Mailpit: http://localhost:8025 (SMTP всередині мережі — `eger-mailpit:1025`)
 - Перевірка API: http://localhost:5080/health
 
 Під час старту API створює індекси в базі `EgerDb` і обліковий запис адміністратора, якщо його ще немає.
@@ -44,13 +45,18 @@ docker compose up --build
 | Змінна | Призначення | Локальне значення за замовчуванням |
 | --- | --- | --- |
 | `JWT_SECRET` | Секрет підпису JWT, щонайменше 32 байти | `eger-dev-only-change-me-please-32b!` |
-| `TELEGRAM_BOT_TOKEN` | Токен бота від BotFather для кодів 2FA | порожньо |
+| `TELEGRAM_BOT_TOKEN` | Токен бота від BotFather для коду в Telegram | порожньо |
+| `SMTP_HOST` | Сервер SMTP для коду на пошту | у Compose — `eger-mailpit`, якщо порожньо |
+| `SMTP_PORT` | Порт SMTP | `1025` |
+| `SMTP_USER` | Користувач SMTP, якщо сервер вимагає вхід | порожньо |
+| `SMTP_PASSWORD` | Пароль SMTP | порожньо |
+| `SMTP_FROM` | Адреса відправника | у Compose — `eger@localhost`, якщо порожньо |
 | `MONGO_CONNECTION_STRING` | Рядок підключення MongoDB | `mongodb://localhost:27017` (у Compose — `mongodb://eger-mongo:27017`) |
 | `MONGO_DATABASE` | Назва бази | `EgerDb` |
 | `REDIS_CONNECTION_STRING` | Redis | `localhost:6379` (у Compose — `eger-redis:6379`) |
 | `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Початковий адміністратор | `admin@eger.ua` / `Admin123!` |
 
-`TELEGRAM_BOT_TOKEN` потрібен лише для двофакторного входу. Без нього звичайний вхід працює, а вхід із увімкненою 2FA повертає помилку. Код живе в Redis 5 хвилин за ключем `eger:2fa:{userId}`. Текст повідомлення: `Твій код авторизації в EGER: 123456`. Команда `/start` боту повертає ідентифікатор чату для прив’язки в кабінеті студента.
+Якщо двофакторну перевірку увімкнено, після пароля обирають канал: Telegram або пошту облікового запису. Діє лише останній код. Він лежить у Redis 5 хвилин за ключем `eger:2fa:{userId}`. Текст і в Telegram, і в листі: `Твій код авторизації в EGER: 123456`. Без `TELEGRAM_BOT_TOKEN` або без ідентифікатора чату канал Telegram не надсилає код, а пошта лишається доступною. Без SMTP надсилання на пошту відповідає, що пошту не налаштовано. У Compose порожні `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` і `SMTP_FROM` лишають Mailpit. Команда `/start` боту повертає ідентифікатор чату для прив’язки в кабінеті викладача або студента.
 
 Сесії JWT також лежать у Redis (`eger:session:{userId}`), тож вихід з облікового запису одразу відкликає токен.
 

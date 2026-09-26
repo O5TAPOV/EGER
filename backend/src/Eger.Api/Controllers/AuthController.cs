@@ -21,6 +21,13 @@ public class AuthController : ControllerBase
         return Ok(await _auth.LoginAsync(request, ct));
     }
 
+    [HttpPost("2fa/send")]
+    [AllowAnonymous]
+    public async Task<ActionResult<LoginResponse>> SendCode([FromBody] Send2FaRequest request, CancellationToken ct)
+    {
+        return Ok(await _auth.SendCodeAsync(request, ct));
+    }
+
     [HttpPost("verify-2fa")]
     [AllowAnonymous]
     public async Task<ActionResult<LoginResponse>> Verify([FromBody] Verify2FaRequest request, CancellationToken ct)

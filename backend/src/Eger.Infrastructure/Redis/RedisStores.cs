@@ -36,21 +36,26 @@ public class RedisTwoFactorService : ITwoFactorService
 {
     private readonly IDatabase _db;
     private readonly ITelegramNotifier _telegram;
+    private readonly IEmailSender _email;
 
-    public RedisTwoFactorService(IConnectionMultiplexer multiplexer, ITelegramNotifier telegram)
+    public RedisTwoFactorService(IConnectionMultiplexer multiplexer, ITelegramNotifier telegram, IEmailSender email)
     {
         _db = multiplexer.GetDatabase();
         _telegram = telegram;
+        _email = email;
     }
 
-    public async Task IssueAsync(string userId, string telegramChatId, CancellationToken ct = default)
+    public async Task IssueAsync(string userId, TwoFactorChannel channel, string destination, CancellationToken ct = default)
     {
         var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
         var key = Key(userId);
         await _db.StringSetAsync(key, code, TimeSpan.FromMinutes(5));
         try
         {
-            await _telegram.SendAuthCodeAsync(telegramChatId, code, ct);
+            if (channel == TwoFactorChannel.Email)
+                await _email.SendAuthCodeAsync(destination, code, ct);
+            else
+                await _telegram.SendAuthCodeAsync(destination, code, ct);
         }
         catch
         {

@@ -12,6 +12,15 @@ public class LoginRequest
     public string Password { get; set; } = "";
 }
 
+public class Send2FaRequest
+{
+    [Required(ErrorMessage = "Ідентифікатор користувача обов'язковий")]
+    public string UserId { get; set; } = "";
+
+    [Required(ErrorMessage = "Оберіть канал надсилання")]
+    public string Channel { get; set; } = "";
+}
+
 public class Verify2FaRequest
 {
     [Required(ErrorMessage = "Ідентифікатор користувача обов'язковий")]

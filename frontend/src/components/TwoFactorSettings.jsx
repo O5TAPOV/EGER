@@ -41,10 +41,9 @@ export default function TwoFactorSettings() {
         <h2 className="text-lg font-semibold text-stone-50">Двофакторна перевірка</h2>
       </div>
       <ol className="mb-4 list-decimal space-y-1 pl-5 text-sm text-stone-300">
-        <li>Відкрийте Telegram і знайдіть бота EGER, якого налаштував адміністратор.</li>
-        <li>Надішліть команду /start. Бот відповість числовим ідентифікатором чату.</li>
-        <li>Вставте цей ідентифікатор у поле нижче.</li>
-        <li>Увімкніть перевірку та збережіть. Наступний вхід попросить 6-значний код із Telegram.</li>
+        <li>Увімкніть перевірку. Наступний вхід запропонує код у Telegram або на пошту цього облікового запису.</li>
+        <li>Для Telegram відкрийте бота EGER, надішліть /start і вставте ідентифікатор чату нижче. Без нього код у Telegram не надійде.</li>
+        <li>Пошта каналу береться з облікового запису. Ідентифікатор чату для неї не потрібен.</li>
       </ol>
       <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={save}>
         <Field label="Ідентифікатор чату Telegram">
@@ -58,7 +57,7 @@ export default function TwoFactorSettings() {
         </Field>
         <label className="flex items-center gap-3 rounded-lg border border-eger-line px-3 py-2 text-sm">
           <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          Увімкнути код із Telegram
+          Увімкнути двофакторну перевірку
         </label>
         <button type="submit" className="btn-primary" disabled={busy}>
           Зберегти

@@ -16,6 +16,7 @@ public class AuthService
     private readonly IJwtTokenService _jwt;
     private readonly ISessionStore _sessions;
     private readonly ITwoFactorService _twoFactor;
+    private readonly IEmailSender _email;
 
     public AuthService(
         IUserRepository users,
@@ -24,7 +25,8 @@ public class AuthService
         IPasswordHasher hasher,
         IJwtTokenService jwt,
         ISessionStore sessions,
-        ITwoFactorService twoFactor)
+        ITwoFactorService twoFactor,
+        IEmailSender email)
     {
         _users = users;
         _students = students;
@@ -33,6 +35,7 @@ public class AuthService
         _jwt = jwt;
         _sessions = sessions;
         _twoFactor = twoFactor;
+        _email = email;
     }
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
@@ -44,10 +47,31 @@ public class AuthService
 
         if (user.Is2FAEnabled)
         {
-            if (string.IsNullOrWhiteSpace(user.TelegramChatId))
-                throw new AppException(400, "Двофакторну перевірку увімкнено, але Telegram не прив'язано");
+            return new LoginResponse
+            {
+                Requires2FA = true,
+                UserId = user.Id,
+                Message = "Оберіть, куди надіслати код. Він дійсний 5 хвилин."
+            };
+        }
 
-            await _twoFactor.IssueAsync(user.Id, user.TelegramChatId, ct);
+        return await IssueSessionAsync(user, ct);
+    }
+
+    public async Task<LoginResponse> SendCodeAsync(Send2FaRequest request, CancellationToken ct = default)
+    {
+        Ids.Ensure(request.UserId);
+        var user = await _users.GetByIdAsync(request.UserId, ct)
+            ?? throw new AppException(401, "Потрібна повторна авторизація");
+        if (!user.Is2FAEnabled)
+            throw new AppException(400, "Двофакторну перевірку вимкнено");
+
+        var channel = request.Channel.Trim().ToLowerInvariant();
+        if (channel == "telegram")
+        {
+            if (string.IsNullOrWhiteSpace(user.TelegramChatId))
+                throw new AppException(400, "Telegram не прив'язано. Вкажіть ідентифікатор чату в кабінеті або надішліть код на пошту.");
+            await _twoFactor.IssueAsync(user.Id, TwoFactorChannel.Telegram, user.TelegramChatId, ct);
             return new LoginResponse
             {
                 Requires2FA = true,
@@ -56,7 +80,20 @@ public class AuthService
             };
         }
 
-        return await IssueSessionAsync(user, ct);
+        if (channel == "email")
+        {
+            if (!_email.IsConfigured)
+                throw new AppException(503, "Надсилання коду на пошту не налаштовано.");
+            await _twoFactor.IssueAsync(user.Id, TwoFactorChannel.Email, user.Email, ct);
+            return new LoginResponse
+            {
+                Requires2FA = true,
+                UserId = user.Id,
+                Message = "Код надіслано на пошту. Він дійсний 5 хвилин."
+            };
+        }
+
+        throw new AppException(400, "Оберіть канал: Telegram або пошту.");
     }
 
     public async Task<LoginResponse> VerifyAsync(Verify2FaRequest request, CancellationToken ct = default)
@@ -98,8 +135,8 @@ public class AuthService
             ? null
             : request.TelegramChatId.Trim();
 
-        if (request.Is2FAEnabled && string.IsNullOrWhiteSpace(chatId))
-            throw new AppException(400, "Щоб увімкнути двофакторну перевірку, вкажіть Telegram Chat ID");
+        if (request.Is2FAEnabled && user.Role == Roles.Admin)
+            throw new AppException(400, "Для адміністратора двофакторна перевірка недоступна");
 
         if (chatId is not null && (!long.TryParse(chatId, out var parsed) || parsed <= 0))
             throw new AppException(400, "Telegram Chat ID має бути додатним числом");

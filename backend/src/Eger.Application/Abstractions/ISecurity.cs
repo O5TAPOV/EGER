@@ -20,13 +20,25 @@ public interface ISessionStore
     Task RevokeAsync(string userId, CancellationToken ct = default);
 }
 
+public enum TwoFactorChannel
+{
+    Telegram,
+    Email
+}
+
 public interface ITwoFactorService
 {
-    Task IssueAsync(string userId, string telegramChatId, CancellationToken ct = default);
+    Task IssueAsync(string userId, TwoFactorChannel channel, string destination, CancellationToken ct = default);
     Task<bool> VerifyAsync(string userId, string code, CancellationToken ct = default);
 }
 
 public interface ITelegramNotifier
 {
     Task SendAuthCodeAsync(string chatId, string code, CancellationToken ct = default);
+}
+
+public interface IEmailSender
+{
+    bool IsConfigured { get; }
+    Task SendAuthCodeAsync(string email, string code, CancellationToken ct = default);
 }

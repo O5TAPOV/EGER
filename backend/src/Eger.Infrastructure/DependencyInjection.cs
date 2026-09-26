@@ -1,4 +1,5 @@
 using Eger.Application.Abstractions;
+using Eger.Infrastructure.Mail;
 using Eger.Infrastructure.Mongo;
 using Eger.Infrastructure.Redis;
 using Eger.Infrastructure.Security;
@@ -34,6 +35,7 @@ public static class DependencyInjection
         });
         services.AddSingleton<ISessionStore, RedisSessionStore>();
         services.AddSingleton<ITelegramNotifier, TelegramNotifier>();
+        services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<ITwoFactorService, RedisTwoFactorService>();
         services.AddHostedService<TelegramLinkHostedService>();
         return services;
