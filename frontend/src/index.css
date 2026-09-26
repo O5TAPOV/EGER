@@ -3,5 +3,41 @@
 @tailwind utilities;
 
 body {
-  @apply bg-eger-bg text-stone-100 antialiased;
+  @apply bg-eger-bg font-sans text-stone-100 antialiased;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn border border-eger-gold/40 bg-eger-green text-eger-gold hover:bg-emerald-900;
+  }
+  .btn-ghost {
+    @apply btn border border-eger-line bg-transparent text-stone-200 hover:border-eger-gold/50;
+  }
+  .btn-danger {
+    @apply btn border border-red-900 bg-red-950 text-red-100 hover:bg-red-900;
+  }
+  .field {
+    @apply w-full rounded-lg border border-eger-line bg-black/30 px-3 py-2 text-sm outline-none ring-eger-gold/30 placeholder:text-stone-500 focus:border-eger-gold focus:ring-2;
+  }
+  .card {
+    @apply rounded-2xl border border-eger-line bg-eger-card/90 p-5 shadow-lg shadow-black/20;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-stone-400;
+  }
+  .table-wrap {
+    @apply overflow-x-auto;
+  }
+  .data-table {
+    @apply w-full min-w-[640px] text-left text-sm;
+  }
+  .data-table th {
+    @apply border-b border-eger-line px-3 py-2 text-xs font-medium uppercase tracking-wide text-stone-400;
+  }
+  .data-table td {
+    @apply border-b border-eger-line/70 px-3 py-3 align-middle;
+  }
 }

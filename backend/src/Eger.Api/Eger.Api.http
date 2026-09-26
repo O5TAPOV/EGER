@@ -1,6 +1,14 @@
-@Eger.Api_HostAddress = http://localhost:5086
+@host = http://localhost:5080
 
-GET {{Eger.Api_HostAddress}}/weatherforecast/
-Accept: application/json
+### Вхід адміністратора
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@eger.ua",
+  "password": "Admin123!"
+}
 
 ###
+
+GET {{host}}/health

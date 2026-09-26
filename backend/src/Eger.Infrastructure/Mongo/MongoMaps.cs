@@ -39,7 +39,9 @@ public static class MongoMaps
         {
             map.AutoMap();
             map.SetIgnoreExtraElements(true);
-            map.IdMemberMap?.SetSerializer(new StringSerializer(BsonType.ObjectId));
+            if (map.IdMemberMap is null)
+                throw new InvalidOperationException($"Не вдалося зіставити поле Id для {typeof(T).Name}");
+            map.IdMemberMap.SetSerializer(new StringSerializer(BsonType.ObjectId));
         });
     }
 }
