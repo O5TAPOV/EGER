@@ -44,6 +44,8 @@ public class RegisterService
     {
         var subject = await RequireSubjectAsync(subjectId, ct);
         var (students, canEdit) = await ResolveAudienceAsync(actor, subject, group, studentId, ct);
+        var checkedGroup = actor.Role == Roles.Student ? students[0].Group : group;
+        EnsureSubjectGroup(subject, checkedGroup);
         var sheetGroup = students.Count == 0
             ? group?.Trim() ?? ""
             : students[0].Group;
@@ -78,6 +80,8 @@ public class RegisterService
             throw new AppException(403, "Недостатньо прав");
         var subject = await RequireSubjectAsync(subjectId, ct);
         await EnsureTeachesAsync(actor, subject, ct);
+        if (subject.Groups is { Count: > 0 })
+            return subject.Groups.OrderBy(group => group, StringComparer.CurrentCulture).ToList();
         var groups = await _sessions.GetGroupsBySubjectAsync(subject.Id, ct);
         return groups
             .OrderBy(group => group, StringComparer.CurrentCulture)
@@ -112,6 +116,7 @@ public class RegisterService
         await EnsureTeachesAsync(actor, subject, ct);
         var settings = await _settings.GetAsync(ct);
         var group = request.Group.Trim();
+        EnsureSubjectGroup(subject, group);
         if (request.MaxPoints > settings.CurrentMax)
             throw new AppException(400, $"Увага. Максимум колонки {request.MaxPoints} перевищує допустимий максимум поточних балів {settings.CurrentMax}.");
 
@@ -881,5 +886,15 @@ public class RegisterService
         if (!subject.ProfessorIds.Contains(me.Id))
             throw new AppException(403, "Ви не викладаєте цю дисципліну");
         return me;
+    }
+
+    private static void EnsureSubjectGroup(Subject subject, string? group)
+    {
+        if (subject.Groups is not { Count: > 0 })
+            return;
+        var value = group?.Trim() ?? "";
+        if (subject.Groups.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase)))
+            return;
+        throw new AppException(400, $"Дисципліна «{subject.Title}» не читається в групі {value}.");
     }
 }

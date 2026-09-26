@@ -7,52 +7,52 @@ import { Field } from "../components/Modal";
 import TwoFactorSettings from "../components/TwoFactorSettings";
 import { useToast } from "../context/ToastContext";
 
+function groupsOf(subject) {
+  return Array.isArray(subject?.groups) ? subject.groups : [];
+}
+
 export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = false }) {
   const { push } = useToast();
   const [subjects, setSubjects] = useState([]);
-  const [groups, setGroups] = useState([]);
   const [subjectId, setSubjectId] = useState("");
   const [group, setGroup] = useState("");
-  const [journalGroups, setJournalGroups] = useState([]);
-  const [groupReady, setGroupReady] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get(subjectsPath), api.get("/students/groups")])
-      .then(([subjectsRes, groupsRes]) => {
-        setSubjects(subjectsRes.data);
-        setGroups(groupsRes.data);
-        if (subjectsRes.data[0]) setSubjectId(subjectsRes.data[0].id);
+    api.get(subjectsPath)
+      .then(({ data }) => {
+        setSubjects(data);
+        const first = data.find((subject) => groupsOf(subject).length > 0) || data[0];
+        if (first) {
+          setSubjectId(first.id);
+          setGroup(groupsOf(first)[0] || "");
+        }
       })
       .catch((error) => push(errorText(error, "Не вдалося завантажити дисципліни"), "error"))
       .finally(() => setLoading(false));
   }, [subjectsPath, push]);
 
-  useEffect(() => {
-    if (!subjectId) return undefined;
-    let cancelled = false;
-    setGroupReady(false);
-    api.get("/academic/register/groups", { params: { subjectId } })
-      .then(({ data }) => {
-        if (cancelled) return;
-        const known = Array.isArray(data) ? data : [];
-        setJournalGroups(known);
-        setGroup((current) => (known.includes(current) ? current : (known[0] || groups[0] || "")));
-        setGroupReady(true);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setJournalGroups([]);
-        setGroup((current) => current || groups[0] || "");
-        setGroupReady(true);
-        push(errorText(error, "Не вдалося визначити групи відомості"), "error");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [subjectId, groups, push]);
+  const selected = subjects.find((subject) => subject.id === subjectId);
+  const groupOptions = groupsOf(selected);
+  const subjectOptions = group
+    ? subjects.filter((subject) => groupsOf(subject).includes(group))
+    : subjects;
 
-  const groupOptions = [...new Set([...journalGroups, ...groups])];
+  const chooseSubject = (nextId) => {
+    const next = subjects.find((subject) => subject.id === nextId);
+    const allowed = groupsOf(next);
+    setSubjectId(nextId);
+    setGroup((current) => (allowed.includes(current) ? current : (allowed[0] || "")));
+  };
+
+  const chooseGroup = (nextGroup) => {
+    setGroup(nextGroup);
+    setSubjectId((current) => {
+      const currentSubject = subjects.find((subject) => subject.id === current);
+      if (groupsOf(currentSubject).includes(nextGroup)) return current;
+      return subjects.find((subject) => groupsOf(subject).includes(nextGroup))?.id || "";
+    });
+  };
 
   return (
     <Layout title="Відомість">
@@ -69,24 +69,23 @@ export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = f
               <DarkSelect
                 className="min-w-64"
                 value={subjectId}
-                onChange={setSubjectId}
+                onChange={chooseSubject}
                 placeholder="Оберіть дисципліну"
-                options={subjects.map((subject) => ({ value: subject.id, label: subject.title }))}
+                options={subjectOptions.map((subject) => ({ value: subject.id, label: subject.title }))}
               />
             </Field>
             <Field label="Група">
               <DarkSelect
                 className="min-w-40"
                 value={group}
-                onChange={setGroup}
-                placeholder={groups.length === 0 ? "Груп ще немає" : "Оберіть групу"}
-                disabled={groups.length === 0}
+                onChange={chooseGroup}
+                placeholder={groupOptions.length === 0 ? "Груп ще немає" : "Оберіть групу"}
+                disabled={groupOptions.length === 0}
                 options={groupOptions.map((item) => ({ value: item, label: item }))}
               />
             </Field>
           </div>
-          {subjectId && !groupReady && <p className="text-stone-400">Завантаження груп...</p>}
-          {subjectId && group && groupReady && <Gradebook subjectId={subjectId} group={group} linkBase={linkBase} allowColumn />}
+          {subjectId && group && <Gradebook subjectId={subjectId} group={group} linkBase={linkBase} allowColumn />}
           {showTwoFactor && <TwoFactorSettings />}
         </div>
       )}

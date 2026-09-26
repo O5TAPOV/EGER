@@ -29,6 +29,7 @@ const emptySubject = {
   credits: 4,
   controlForm: "Екзамен",
   professorIds: [],
+  groups: [],
 };
 
 export default function AdminDashboard() {
@@ -42,6 +43,8 @@ export default function AdminDashboard() {
   const [settings, setSettings] = useState(null);
   const [editor, setEditor] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [studentGroup, setStudentGroup] = useState("");
+  const [groupDraft, setGroupDraft] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -106,6 +109,7 @@ export default function AdminDashboard() {
           credits: Number(editor.form.credits),
           controlForm: editor.form.controlForm || "Екзамен",
           professorIds: editor.form.professorIds,
+          groups: editor.form.groups || [],
         };
         if (editor.id) await api.put(`/subjects/${editor.id}`, payload);
         else await api.post("/subjects", payload);
@@ -202,10 +206,16 @@ export default function AdminDashboard() {
           title="Студенти"
           action={() => setEditor({ kind: "student", id: null, form: { ...emptyStudent } })}
         >
+          <StudentGroupFilter
+            students={students}
+            subjects={subjects}
+            value={studentGroup}
+            onChange={setStudentGroup}
+          />
           <Rows
             empty="Студентів ще немає"
             headers={["ПІБ", "Група", "Залікова книжка", "Пошта", "Рік", ""]}
-            rows={students.map((item) => [
+            rows={(studentGroup ? students.filter((item) => item.group === studentGroup) : students).map((item) => [
               <Link key={item.id} className="font-medium text-eger-gold hover:underline" to={`/admin/students/${item.id}`}>
                 {item.fullName}
               </Link>,
@@ -259,11 +269,12 @@ export default function AdminDashboard() {
         >
           <Rows
             empty="Дисциплін ще немає"
-            headers={["Назва", "Кредити", "Контроль", "Викладачі", ""]}
+            headers={["Назва", "Кредити", "Контроль", "Групи", "Викладачі", ""]}
             rows={subjects.map((item) => [
               item.title,
               item.credits,
               item.controlForm || "Екзамен",
+              (item.groups || []).join(", ") || "—",
               item.professorNames.join(", ") || "—",
               <RowActions
                 key={item.id}
@@ -276,6 +287,7 @@ export default function AdminDashboard() {
                       credits: item.credits,
                       controlForm: item.controlForm || "Екзамен",
                       professorIds: [...item.professorIds],
+                      groups: [...(item.groups || [])],
                     },
                   })
                 }
@@ -375,6 +387,48 @@ export default function AdminDashboard() {
                     ]}
                   />
                 </Field>
+                <fieldset>
+                  <legend className="label">Групи</legend>
+                  <div className="mb-2 flex gap-2">
+                    <input
+                      className="field"
+                      value={groupDraft}
+                      placeholder="Код групи"
+                      onChange={(event) => setGroupDraft(event.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => {
+                        const code = groupDraft.trim();
+                        if (!code || editor.form.groups.includes(code)) return;
+                        patch(setEditor, "groups", [...editor.form.groups, code]);
+                        setGroupDraft("");
+                      }}
+                    >
+                      Додати
+                    </button>
+                  </div>
+                  <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-eger-line p-3">
+                    {[...new Set([...(editor.form.groups || []), ...students.map((item) => item.group).filter(Boolean)])]
+                      .sort((a, b) => a.localeCompare(b, "uk"))
+                      .map((code) => (
+                        <label key={code} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={editor.form.groups.includes(code)}
+                            onChange={(event) => {
+                              const next = new Set(editor.form.groups);
+                              if (event.target.checked) next.add(code);
+                              else next.delete(code);
+                              patch(setEditor, "groups", [...next]);
+                            }}
+                          />
+                          {code}
+                        </label>
+                      ))}
+                  </div>
+                </fieldset>
                 <fieldset>
                   <legend className="label">Викладачі</legend>
                   <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-eger-line p-3">
@@ -491,6 +545,33 @@ function GradingSettings({ settings, busy, onChange, onSave }) {
           </table>
         </div>
       </section>
+    </div>
+  );
+}
+
+function StudentGroupFilter({ students, subjects, value, onChange }) {
+  const codes = [...new Set(students.map((item) => item.group).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "uk"));
+  const taught = value
+    ? subjects.filter((subject) => (subject.groups || []).includes(value))
+    : [];
+
+  return (
+    <div className="mb-4 space-y-3">
+      <Field label="Група">
+        <DarkSelect
+          className="w-56"
+          value={value}
+          onChange={onChange}
+          options={[{ value: "", label: "Всі групи" }, ...codes.map((code) => ({ value: code, label: code }))]}
+        />
+      </Field>
+      {value && (
+        <p className="text-sm text-stone-300">
+          Дисципліни групи {value}:{" "}
+          {taught.length === 0 ? "ще не призначено" : taught.map((subject) => subject.title).join(", ")}
+        </p>
+      )}
     </div>
   );
 }

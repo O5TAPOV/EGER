@@ -228,9 +228,15 @@ public class AcademicService
         var settings = await _settings.GetAsync(ct);
         var grades = await _grades.GetByStudentAsync(student.Id, ct);
         var subjects = await _subjects.GetAllAsync(ct);
-        var taughtIds = (await _sessions.GetSubjectIdsByGroupAsync(student.Group, ct)).ToHashSet(StringComparer.Ordinal);
-        foreach (var subjectId in grades.Select(grade => grade.SubjectId))
-            taughtIds.Add(subjectId);
+        var taughtIds = subjects
+            .Where(subject => SubjectTaughtTo(subject, student.Group))
+            .Select(subject => subject.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (taughtIds.Count == 0)
+        {
+            foreach (var subjectId in await _sessions.GetSubjectIdsByGroupAsync(student.Group, ct))
+                taughtIds.Add(subjectId);
+        }
         var subjectMap = subjects.ToDictionary(subject => subject.Id);
         var scores = new List<SubjectScoreResponse>();
 
@@ -298,6 +304,9 @@ public class AcademicService
 
         throw new AppException(403, "Недостатньо прав");
     }
+
+    private static bool SubjectTaughtTo(Subject subject, string group) =>
+        subject.Groups?.Any(item => string.Equals(item, group, StringComparison.OrdinalIgnoreCase)) == true;
 
     private async Task EnsureTeachesAsync(Actor actor, Subject subject, CancellationToken ct)
     {

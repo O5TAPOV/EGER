@@ -317,6 +317,9 @@ public class ClassSessionRepository : IClassSessionRepository
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ClassSession>> GetByGroupAsync(string group, CancellationToken ct = default) =>
+        await _context.ClassSessions.Find(x => x.Group == group).ToListAsync(ct);
+
     public async Task<IReadOnlyList<string>> GetSubjectIdsByGroupAsync(string group, CancellationToken ct = default)
     {
         var sessions = await _context.ClassSessions.Find(x => x.Group == group).ToListAsync(ct);
@@ -355,11 +358,17 @@ public class JournalSheetRepository : IJournalSheetRepository
     public async Task<JournalSheet?> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default) =>
         await _context.JournalSheets.Find(x => x.SubjectId == subjectId && x.Group == group).FirstOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyList<JournalSheet>> GetByGroupAsync(string group, CancellationToken ct = default) =>
+        await _context.JournalSheets.Find(x => x.Group == group).ToListAsync(ct);
+
     public Task CreateAsync(JournalSheet sheet, CancellationToken ct = default) =>
         UserRepository.InsertAsync(_context.JournalSheets, sheet, ct);
 
     public Task UpdateAsync(JournalSheet sheet, CancellationToken ct = default) =>
         UserRepository.ReplaceAsync(_context.JournalSheets, sheet.Id, sheet, ct);
+
+    public Task DeleteAsync(string id, CancellationToken ct = default) =>
+        _context.JournalSheets.DeleteOneAsync(x => x.Id == id, ct);
 
     public Task DeleteAllAsync(CancellationToken ct = default) =>
         _context.JournalSheets.DeleteManyAsync(Builders<JournalSheet>.Filter.Empty, ct);

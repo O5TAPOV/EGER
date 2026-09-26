@@ -79,6 +79,7 @@ public interface IClassSessionRepository
     Task<IReadOnlyList<ClassSession>> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetGroupsBySubjectAsync(string subjectId, CancellationToken ct = default);
     Task<IReadOnlyList<string>> GetSubjectIdsByGroupAsync(string group, CancellationToken ct = default);
+    Task<IReadOnlyList<ClassSession>> GetByGroupAsync(string group, CancellationToken ct = default);
     Task CreateAsync(ClassSession session, CancellationToken ct = default);
     Task UpdateAsync(ClassSession session, CancellationToken ct = default);
     Task DeleteAsync(string id, CancellationToken ct = default);
@@ -89,8 +90,10 @@ public interface IClassSessionRepository
 public interface IJournalSheetRepository
 {
     Task<JournalSheet?> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default);
+    Task<IReadOnlyList<JournalSheet>> GetByGroupAsync(string group, CancellationToken ct = default);
     Task CreateAsync(JournalSheet sheet, CancellationToken ct = default);
     Task UpdateAsync(JournalSheet sheet, CancellationToken ct = default);
+    Task DeleteAsync(string id, CancellationToken ct = default);
     Task DeleteAllAsync(CancellationToken ct = default);
     Task EnsureIndexesAsync(CancellationToken ct = default);
 }

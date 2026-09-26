@@ -53,7 +53,8 @@ public class SubjectService
             Title = request.Title.Trim(),
             ProfessorIds = professorIds,
             Credits = request.Credits,
-            ControlForm = NormalizeControlForm(request.ControlForm)
+            ControlForm = NormalizeControlForm(request.ControlForm),
+            Groups = NormalizeGroups(request.Groups)
         };
         await _subjects.CreateAsync(subject, ct);
         var mapped = await MapManyAsync([subject], ct);
@@ -69,6 +70,7 @@ public class SubjectService
         subject.ProfessorIds = await NormalizeProfessorsAsync(request.ProfessorIds, ct);
         subject.Credits = request.Credits;
         subject.ControlForm = NormalizeControlForm(request.ControlForm);
+        subject.Groups = NormalizeGroups(request.Groups);
         await _subjects.UpdateAsync(subject, ct);
         var mapped = await MapManyAsync([subject], ct);
         return mapped[0];
@@ -105,6 +107,19 @@ public class SubjectService
         return distinct;
     }
 
+    private static List<string> NormalizeGroups(IEnumerable<string>? groups)
+    {
+        var distinct = (groups ?? [])
+            .Where(group => !string.IsNullOrWhiteSpace(group))
+            .Select(group => group.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group, StringComparer.CurrentCulture)
+            .ToList();
+        if (distinct.Count == 0)
+            throw new AppException(400, "Вкажіть хоча б одну групу, де читається дисципліна.");
+        return distinct;
+    }
+
     private static string NormalizeControlForm(string? value)
     {
         var text = value?.Trim() ?? "";
@@ -130,7 +145,8 @@ public class SubjectService
                 Credits = s.Credits,
                 ProfessorIds = s.ProfessorIds,
                 ProfessorNames = s.ProfessorIds.Select(id => names.TryGetValue(id, out var name) ? name : "—").ToList(),
-                ControlForm = s.ControlForm is "Залік" or "Екзамен" ? s.ControlForm : ""
+                ControlForm = s.ControlForm is "Залік" or "Екзамен" ? s.ControlForm : "",
+                Groups = s.Groups ?? []
             })
             .ToList();
     }

@@ -8,6 +8,8 @@ public class Subject
 
     public List<string> ProfessorIds { get; set; } = [];
 
+    public List<string> Groups { get; set; } = [];
+
     public int Credits { get; set; }
 
     public string? ControlForm { get; set; }

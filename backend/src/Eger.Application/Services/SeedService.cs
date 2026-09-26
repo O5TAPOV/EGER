@@ -8,7 +8,10 @@ namespace Eger.Application.Services;
 public class SeedService
 {
     public const string DemoStudentName = "Остапов Антон Юрійович";
+    public const string InformaticsGroup = "3СОІ";
+    public const string MathGroup = "3СОМ";
     private const string LegacyDemoStudentName = "Остапов Антон";
+    private const string LegacyInformaticsGroup = "КН-21";
     public const string StudentPassword = "Student123!";
     public const string ProfessorPassword = "Professor123!";
 
@@ -54,16 +57,19 @@ public class SeedService
                 await _students.UpdateAsync(anton, ct);
             }
 
-            var grades = await _grades.GetAllAsync(ct);
+            await MigrateLegacyGroupAsync(ct);
+            await EnsureCurriculumAsync(ct);
             if (await HasOfficialSheetAsync(ct))
             {
+                await EnsureMathJournalAsync(ct);
+                var grades = await _grades.GetAllAsync(ct);
                 return new SeedResult
                 {
                     AlreadySeeded = true,
                     Message = renamed
-                        ? "Ім'я демонстраційного студента оновлено: Остапов Антон Юрійович"
-                        : "Демонстраційні дані вже було згенеровано раніше",
-                    Students = existing.Count,
+                        ? "Ім'я демонстраційного студента оновлено: Остапов Антон Юрійович. Групи: 3СОІ — інформатика, 3СОМ — математика."
+                        : "Групи розведено: 3СОІ — інформатика, 3СОМ — математика. Людей не продубльовано.",
+                    Students = (await _students.GetAllAsync(ct)).Count,
                     Professors = (await _professors.GetAllAsync(ct)).Count,
                     Subjects = (await _subjects.GetAllAsync(ct)).Count,
                     Grades = grades.Count
@@ -74,11 +80,12 @@ public class SeedService
             await _sessions.DeleteAllAsync(ct);
             await _sheets.DeleteAllAsync(ct);
             var written = await WriteJournalAsync(ct);
+            written += await EnsureMathJournalAsync(ct);
             return new SeedResult
             {
                 AlreadySeeded = false,
-                Message = "Відомість перебудовано за формою журналу обліку успішності",
-                Students = existing.Count,
+                Message = "Відомість перебудовано: 3СОІ — інформатика, 3СОМ — математика",
+                Students = (await _students.GetAllAsync(ct)).Count,
                 Professors = (await _professors.GetAllAsync(ct)).Count,
                 Subjects = (await _subjects.GetAllAsync(ct)).Count,
                 Grades = written
@@ -89,37 +96,111 @@ public class SeedService
         var melnyk = await AddProfessorAsync("andrii.melnyk@eger.ua", "Мельник Андрій Петрович", "Кафедра програмної інженерії", "Професор", ct);
         var shevchenko = await AddProfessorAsync("maria.shevchenko@eger.ua", "Шевченко Марія Василівна", "Кафедра інформаційних систем", "Кандидат технічних наук", ct);
         var bondarenko = await AddProfessorAsync("ihor.bondarenko@eger.ua", "Бондаренко Ігор Олександрович", "Кафедра комп'ютерних наук", "Доцент", ct);
+        var lysenko = await AddProfessorAsync("olha.lysenko@eger.ua", "Лисенко Ольга Петрівна", "Кафедра математики", "Доцент", ct);
 
-        await AddSubjectAsync("Теорія баз даних", 5, [kovalenko.Id], "Екзамен", ct);
-        await AddSubjectAsync("Алгоритми та структури даних", 6, [kovalenko.Id, bondarenko.Id], "Екзамен", ct);
-        await AddSubjectAsync("Веб-технології", 4, [bondarenko.Id], "Залік", ct);
-        await AddSubjectAsync("Операційні системи", 5, [melnyk.Id], "Екзамен", ct);
-        await AddSubjectAsync("Дискретна математика", 4, [shevchenko.Id], "Екзамен", ct);
-        await AddSubjectAsync("Комп'ютерні мережі", 4, [melnyk.Id], "Екзамен", ct);
-        await AddSubjectAsync("Проєктування інформаційних систем", 5, [shevchenko.Id], "Екзамен", ct);
+        await AddSubjectAsync("Теорія баз даних", 5, [kovalenko.Id], "Екзамен", [InformaticsGroup], ct);
+        await AddSubjectAsync("Алгоритми та структури даних", 6, [kovalenko.Id, bondarenko.Id], "Екзамен", [InformaticsGroup, "КН-22"], ct);
+        await AddSubjectAsync("Веб-технології", 4, [bondarenko.Id], "Залік", [InformaticsGroup], ct);
+        await AddSubjectAsync("Операційні системи", 5, [melnyk.Id], "Екзамен", [InformaticsGroup, "ПІ-21"], ct);
+        await AddSubjectAsync("Дискретна математика", 4, [shevchenko.Id], "Екзамен", [InformaticsGroup, "ІС-21"], ct);
+        await AddSubjectAsync("Комп'ютерні мережі", 4, [melnyk.Id], "Екзамен", [InformaticsGroup, "ПІ-21"], ct);
+        await AddSubjectAsync("Проєктування інформаційних систем", 5, [shevchenko.Id], "Екзамен", [InformaticsGroup, "ІС-21"], ct);
+        await AddSubjectAsync("Математичний аналіз", 5, [lysenko.Id], "Екзамен", [MathGroup], ct);
+        await AddSubjectAsync("Лінійна алгебра", 4, [lysenko.Id], "Екзамен", [MathGroup], ct);
+        await AddSubjectAsync("Аналітична геометрія", 3, [lysenko.Id], "Залік", [MathGroup], ct);
 
-        await AddStudentAsync("anton.ostapov@eger.ua", DemoStudentName, "КН-21", "KN-21015", 2021, ct);
-        await AddStudentAsync("daryna.kozak@eger.ua", "Козак Дарина Олегівна", "КН-21", "KN-21008", 2021, ct);
-        await AddStudentAsync("maksym.lysenko@eger.ua", "Лисенко Максим Сергійович", "КН-21", "KN-21022", 2021, ct);
-        await AddStudentAsync("oksana.kravchuk@eger.ua", "Кравчук Оксана Миколаївна", "КН-21", "KN-21031", 2021, ct);
+        await AddStudentAsync("anton.ostapov@eger.ua", DemoStudentName, "3СОІ", "KN-21015", 2021, ct);
+        await AddStudentAsync("daryna.kozak@eger.ua", "Козак Дарина Олегівна", "3СОІ", "KN-21008", 2021, ct);
+        await AddStudentAsync("maksym.lysenko@eger.ua", "Лисенко Максим Сергійович", "3СОІ", "KN-21022", 2021, ct);
+        await AddStudentAsync("oksana.kravchuk@eger.ua", "Кравчук Оксана Миколаївна", "3СОІ", "KN-21031", 2021, ct);
         await AddStudentAsync("sofia.tkachenko@eger.ua", "Ткаченко Софія Андріївна", "КН-22", "KN-22004", 2022, ct);
         await AddStudentAsync("pavlo.hrytsenko@eger.ua", "Гриценко Павло Іванович", "КН-22", "KN-22017", 2022, ct);
         await AddStudentAsync("yulia.romaniuk@eger.ua", "Романюк Юлія Петрівна", "ПІ-21", "PI-21011", 2021, ct);
         await AddStudentAsync("denys.savchuk@eger.ua", "Савчук Денис Володимирович", "ПІ-21", "PI-21003", 2021, ct);
         await AddStudentAsync("kateryna.moroz@eger.ua", "Мороз Катерина Ігорівна", "ІС-21", "IS-21019", 2021, ct);
         await AddStudentAsync("nazar.polishchuk@eger.ua", "Поліщук Назар Богданович", "ІС-21", "IS-21006", 2021, ct);
+        await AddStudentAsync("olena.shevchuk@eger.ua", "Шевчук Олена Вікторівна", MathGroup, "SO-31001", 2023, ct);
+        await AddStudentAsync("taras.bondar@eger.ua", "Бондар Тарас Михайлович", MathGroup, "SO-31008", 2023, ct);
+        await AddStudentAsync("iryna.koval@eger.ua", "Коваль Ірина Сергіївна", MathGroup, "SO-31014", 2023, ct);
 
         var gradeCount = await WriteJournalAsync(ct);
+        gradeCount += await EnsureMathJournalAsync(ct);
 
         return new SeedResult
         {
             AlreadySeeded = false,
-            Message = "Демонстраційні дані створено",
-            Students = 10,
-            Professors = 4,
-            Subjects = 7,
+            Message = "Демонстраційні дані створено: 3СОІ — інформатика, 3СОМ — математика",
+            Students = (await _students.GetAllAsync(ct)).Count,
+            Professors = (await _professors.GetAllAsync(ct)).Count,
+            Subjects = (await _subjects.GetAllAsync(ct)).Count,
             Grades = gradeCount
         };
+    }
+
+    private async Task MigrateLegacyGroupAsync(CancellationToken ct)
+    {
+        foreach (var student in await _students.GetByGroupAsync(LegacyInformaticsGroup, ct))
+        {
+            student.Group = InformaticsGroup;
+            await _students.UpdateAsync(student, ct);
+        }
+
+        foreach (var session in await _sessions.GetByGroupAsync(LegacyInformaticsGroup, ct))
+        {
+            session.Group = InformaticsGroup;
+            await _sessions.UpdateAsync(session, ct);
+        }
+
+        foreach (var sheet in await _sheets.GetByGroupAsync(LegacyInformaticsGroup, ct))
+        {
+            var occupied = await _sheets.GetBySubjectGroupAsync(sheet.SubjectId, InformaticsGroup, ct);
+            if (occupied is not null && occupied.Id != sheet.Id)
+            {
+                await _sheets.DeleteAsync(sheet.Id, ct);
+                continue;
+            }
+
+            sheet.Group = InformaticsGroup;
+            await _sheets.UpdateAsync(sheet, ct);
+        }
+    }
+
+    private async Task EnsureCurriculumAsync(CancellationToken ct)
+    {
+        var mathProfessor = await AddProfessorAsync("olha.lysenko@eger.ua", "Лисенко Ольга Петрівна", "Кафедра математики", "Доцент", ct);
+        var subjects = (await _subjects.GetAllAsync(ct)).ToDictionary(subject => subject.Title, StringComparer.Ordinal);
+        var groups = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["Теорія баз даних"] = [InformaticsGroup],
+            ["Алгоритми та структури даних"] = [InformaticsGroup, "КН-22"],
+            ["Веб-технології"] = [InformaticsGroup],
+            ["Операційні системи"] = [InformaticsGroup, "ПІ-21"],
+            ["Дискретна математика"] = [InformaticsGroup, "ІС-21"],
+            ["Комп'ютерні мережі"] = [InformaticsGroup, "ПІ-21"],
+            ["Проєктування інформаційних систем"] = [InformaticsGroup, "ІС-21"],
+            ["Математичний аналіз"] = [MathGroup],
+            ["Лінійна алгебра"] = [MathGroup],
+            ["Аналітична геометрія"] = [MathGroup]
+        };
+
+        foreach (var (title, assigned) in groups)
+        {
+            if (!subjects.TryGetValue(title, out var subject))
+                continue;
+            subject.Groups = assigned.ToList();
+            await _subjects.UpdateAsync(subject, ct);
+        }
+
+        if (!subjects.ContainsKey("Математичний аналіз"))
+            await AddSubjectAsync("Математичний аналіз", 5, [mathProfessor.Id], "Екзамен", [MathGroup], ct);
+        if (!subjects.ContainsKey("Лінійна алгебра"))
+            await AddSubjectAsync("Лінійна алгебра", 4, [mathProfessor.Id], "Екзамен", [MathGroup], ct);
+        if (!subjects.ContainsKey("Аналітична геометрія"))
+            await AddSubjectAsync("Аналітична геометрія", 3, [mathProfessor.Id], "Залік", [MathGroup], ct);
+
+        await AddStudentAsync("olena.shevchuk@eger.ua", "Шевчук Олена Вікторівна", MathGroup, "SO-31001", 2023, ct);
+        await AddStudentAsync("taras.bondar@eger.ua", "Бондар Тарас Михайлович", MathGroup, "SO-31008", 2023, ct);
+        await AddStudentAsync("iryna.koval@eger.ua", "Коваль Ірина Сергіївна", MathGroup, "SO-31014", 2023, ct);
     }
 
     private async Task<int> WriteJournalAsync(CancellationToken ct)
@@ -205,12 +286,12 @@ public class SeedService
         var databases = subjects.FirstOrDefault(subject => subject.Title == "Теорія баз даних");
         if (databases is null)
             return false;
-        var sessions = await _sessions.GetBySubjectGroupAsync(databases.Id, "КН-21", ct);
+        var sessions = await _sessions.GetBySubjectGroupAsync(databases.Id, "3СОІ", ct);
         return sessions.Count(session => session.ColumnKind == JournalColumns.Lecture) >= 8;
     }
 
     private static bool IsFeatured(string subject, string group) =>
-        group == "КН-21" && subject is "Теорія баз даних" or "Алгоритми та структури даних" or "Веб-технології";
+        group == "3СОІ" && subject is "Теорія баз даних" or "Алгоритми та структури даних" or "Веб-технології";
 
     private static int ColumnMax(string subject, string type) => (subject, type) switch
     {
@@ -325,9 +406,18 @@ public class SeedService
         int year,
         CancellationToken ct)
     {
+        var normalized = email.Trim().ToLowerInvariant();
+        var existingUser = await _users.GetByEmailAsync(normalized, ct);
+        if (existingUser is not null)
+        {
+            var existingStudent = await _students.GetByUserIdAsync(existingUser.Id, ct);
+            if (existingStudent is not null)
+                return existingStudent;
+        }
+
         var user = new User
         {
-            Email = email.Trim().ToLowerInvariant(),
+            Email = normalized,
             PasswordHash = _hasher.Hash(StudentPassword),
             Role = Roles.Student,
             Is2FAEnabled = false
@@ -345,14 +435,15 @@ public class SeedService
         return student;
     }
 
-    private async Task<Subject> AddSubjectAsync(string title, int credits, List<string> professorIds, string controlForm, CancellationToken ct)
+    private async Task<Subject> AddSubjectAsync(string title, int credits, List<string> professorIds, string controlForm, IEnumerable<string> groups, CancellationToken ct)
     {
         var subject = new Subject
         {
             Title = title,
             Credits = credits,
             ProfessorIds = professorIds,
-            ControlForm = controlForm
+            ControlForm = controlForm,
+            Groups = groups.ToList()
         };
         await _subjects.CreateAsync(subject, ct);
         return subject;
@@ -384,15 +475,15 @@ public class SeedService
         Dictionary<string, Student> byEmail,
         CancellationToken ct)
     {
-        await PutSheetAsync(subject, "КН-21", 150, "Екзамен", "Лабораторні", professor, professor, ct);
-        var lectures = await AddLessonsAsync(subject, "КН-21", JournalColumns.Lecture, 8, 2, Day(2025, 9, 2), ct);
-        var labs = await AddLessonsAsync(subject, "КН-21", JournalColumns.Laboratory, 6, 4, Day(2025, 9, 4), ct);
-        var controls = await AddControlsAsync(subject, "КН-21", ct,
+        await PutSheetAsync(subject, "3СОІ", 150, "Екзамен", "Лабораторні", professor, professor, ct);
+        var lectures = await AddLessonsAsync(subject, "3СОІ", JournalColumns.Lecture, 8, 2, Day(2025, 9, 2), ct);
+        var labs = await AddLessonsAsync(subject, "3СОІ", JournalColumns.Laboratory, 6, 4, Day(2025, 9, 4), ct);
+        var controls = await AddControlsAsync(subject, "3СОІ", ct,
             ("КЛ", "контрольна робота з нормалізації", 10),
             ("ДЗ", "домашнє завдання з SQL", 10),
             ("КР1", "захист моделі бази даних", 10),
             ("КР2", "підсумкова практична робота", 10));
-        await RememberLegendAsync(subject, "КН-21", controls, ct);
+        await RememberLegendAsync(subject, "3СОІ", controls, ct);
         var count = 0;
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, lectures, [2, 2, 2, 2, 2, 2, 1, 2], ct);
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, labs, [4, 4, 4, 4, 4, 3], ct);
@@ -418,13 +509,13 @@ public class SeedService
         Dictionary<string, Student> byEmail,
         CancellationToken ct)
     {
-        await PutSheetAsync(subject, "КН-21", 180, "Екзамен", "Практичні", currentProfessor, finalProfessor, ct);
-        var lectures = await AddLessonsAsync(subject, "КН-21", JournalColumns.Lecture, 6, 2, Day(2025, 9, 3), ct);
-        var practicals = await AddLessonsAsync(subject, "КН-21", JournalColumns.Practical, 4, 4, Day(2025, 9, 5), ct);
-        var controls = await AddControlsAsync(subject, "КН-21", ct,
+        await PutSheetAsync(subject, "3СОІ", 180, "Екзамен", "Практичні", currentProfessor, finalProfessor, ct);
+        var lectures = await AddLessonsAsync(subject, "3СОІ", JournalColumns.Lecture, 6, 2, Day(2025, 9, 3), ct);
+        var practicals = await AddLessonsAsync(subject, "3СОІ", JournalColumns.Practical, 4, 4, Day(2025, 9, 5), ct);
+        var controls = await AddControlsAsync(subject, "3СОІ", ct,
             ("КЛ", "контрольна робота з алгоритмів", 10),
             ("ДЗ", "домашнє завдання зі структур даних", 10));
-        await RememberLegendAsync(subject, "КН-21", controls, ct);
+        await RememberLegendAsync(subject, "3СОІ", controls, ct);
         var count = 0;
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, lectures, [2, 2, 1, 2, 1, 2], ct);
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, currentProfessor, practicals, [4, 3, 3, 2], ct);
@@ -442,13 +533,13 @@ public class SeedService
         Dictionary<string, Student> byEmail,
         CancellationToken ct)
     {
-        await PutSheetAsync(subject, "КН-21", 120, "Залік", "Лабораторні", professor, professor, ct);
-        var lectures = await AddLessonsAsync(subject, "КН-21", JournalColumns.Lecture, 4, 2, Day(2025, 9, 8), ct);
-        var labs = await AddLessonsAsync(subject, "КН-21", JournalColumns.Laboratory, 3, 4, Day(2025, 9, 10), ct);
-        var controls = await AddControlsAsync(subject, "КН-21", ct,
+        await PutSheetAsync(subject, "3СОІ", 120, "Залік", "Лабораторні", professor, professor, ct);
+        var lectures = await AddLessonsAsync(subject, "3СОІ", JournalColumns.Lecture, 4, 2, Day(2025, 9, 8), ct);
+        var labs = await AddLessonsAsync(subject, "3СОІ", JournalColumns.Laboratory, 3, 4, Day(2025, 9, 10), ct);
+        var controls = await AddControlsAsync(subject, "3СОІ", ct,
             ("КЛ", "контрольна робота з верстки", 8),
             ("ДЗ", "домашнє завдання з інтерфейсу", 8));
-        await RememberLegendAsync(subject, "КН-21", controls, ct);
+        await RememberLegendAsync(subject, "3СОІ", controls, ct);
         var count = 0;
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, lectures, [1, 1, 1, 1], ct);
         count += await WriteMarksAsync(byEmail.GetValueOrDefault("anton.ostapov@eger.ua"), subject, professor, labs, [2, 2, 2], ct);
@@ -615,6 +706,47 @@ public class SeedService
             Date = date
         }, ct);
         return 1;
+    }
+
+    private async Task<int> EnsureMathJournalAsync(CancellationToken ct)
+    {
+        var subjects = (await _subjects.GetAllAsync(ct)).ToDictionary(subject => subject.Title, StringComparer.Ordinal);
+        if (!subjects.TryGetValue("Математичний аналіз", out var analysis))
+            return 0;
+        if ((await _sessions.GetBySubjectGroupAsync(analysis.Id, MathGroup, ct)).Count > 0)
+            return 0;
+
+        var professors = (await _professors.GetAllAsync(ct)).ToDictionary(professor => professor.UserId);
+        var professorUsers = await _users.GetByIdsAsync(professors.Keys, ct);
+        var professor = professorUsers
+            .Where(user => user.Email.Equals("olha.lysenko@eger.ua", StringComparison.OrdinalIgnoreCase))
+            .Select(user => professors.GetValueOrDefault(user.Id))
+            .FirstOrDefault();
+        if (professor is null)
+            return 0;
+
+        await PutSheetAsync(analysis, MathGroup, 150, "Екзамен", "Практичні", professor, professor, ct);
+        var lectures = await AddLessonsAsync(analysis, MathGroup, JournalColumns.Lecture, 4, 2, Day(2025, 9, 1), ct);
+        var practicals = await AddLessonsAsync(analysis, MathGroup, JournalColumns.Practical, 2, 4, Day(2025, 9, 3), ct);
+        var controls = await AddControlsAsync(analysis, MathGroup, ct,
+            ("КР", "контрольна робота з границь", 10));
+        await RememberLegendAsync(analysis, MathGroup, controls, ct);
+
+        var students = (await _students.GetAllAsync(ct)).ToDictionary(student => student.UserId);
+        var users = await _users.GetByIdsAsync(students.Keys, ct);
+        Student? olena = null;
+        foreach (var user in users)
+        {
+            if (user.Email.Equals("olena.shevchuk@eger.ua", StringComparison.OrdinalIgnoreCase)
+                && students.TryGetValue(user.Id, out var student))
+                olena = student;
+        }
+
+        var count = 0;
+        count += await WriteMarksAsync(olena, analysis, professor, lectures, [2, 2, 1, 2], ct);
+        count += await WriteMarksAsync(olena, analysis, professor, practicals, [4, 3], ct);
+        count += await WriteMarksAsync(olena, analysis, professor, controls, [8], ct);
+        return count;
     }
 
     private static DateTime Day(int year, int month, int day) =>
