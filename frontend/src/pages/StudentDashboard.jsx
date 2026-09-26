@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { api, errorText } from "../api/client";
+import Gradebook from "../components/Gradebook";
 import Layout from "../components/Layout";
 import { Field } from "../components/Modal";
-import StudentCardView, { JournalPanel } from "../components/StudentCard";
+import StudentCardView from "../components/StudentCard";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
 
@@ -11,12 +12,10 @@ export default function StudentDashboard() {
   const { user, refresh } = useAuth();
   const { push } = useToast();
   const [card, setCard] = useState(null);
-  const [journal, setJournal] = useState(null);
   const [activeSubjectId, setActiveSubjectId] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [chatId, setChatId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [journalLoading, setJournalLoading] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -32,26 +31,8 @@ export default function StudentDashboard() {
     setChatId(user?.telegramChatId || "");
   }, [user]);
 
-  const openSubject = async (subject) => {
-    if (!card) return;
-    if (activeSubjectId === subject.subjectId) {
-      setActiveSubjectId("");
-      setJournal(null);
-      return;
-    }
-    setActiveSubjectId(subject.subjectId);
-    setJournalLoading(true);
-    try {
-      const { data } = await api.get("/academic/journal", {
-        params: { studentId: card.studentId, subjectId: subject.subjectId },
-      });
-      setJournal(data);
-    } catch (error) {
-      setJournal(null);
-      push(errorText(error, "Не вдалося відкрити журнал"), "error");
-    } finally {
-      setJournalLoading(false);
-    }
+  const openSubject = (subject) => {
+    setActiveSubjectId((current) => (current === subject.subjectId ? "" : subject.subjectId));
   };
 
   const saveTwoFactor = async (event) => {
@@ -80,7 +61,9 @@ export default function StudentDashboard() {
       ) : (
         <div className="space-y-6">
           <StudentCardView card={card} activeSubjectId={activeSubjectId} onSubject={openSubject} />
-          <JournalPanel journal={activeSubjectId ? journal : null} loading={journalLoading} />
+          {activeSubjectId && (
+            <Gradebook subjectId={activeSubjectId} group={card.group} studentId={card.studentId} />
+          )}
 
           <section className="card">
             <div className="mb-3 flex items-center gap-2 text-eger-gold">

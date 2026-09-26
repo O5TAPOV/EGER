@@ -289,6 +289,35 @@ public class GradeRepository : IGradeRepository
         ], ct);
 }
 
+public class ClassSessionRepository : IClassSessionRepository
+{
+    private readonly MongoContext _context;
+    public ClassSessionRepository(MongoContext context) => _context = context;
+
+    public async Task<ClassSession?> GetByIdAsync(string id, CancellationToken ct = default)
+    {
+        if (!ObjectId.TryParse(id, out _))
+            return null;
+        return await _context.ClassSessions.Find(x => x.Id == id).FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ClassSession>> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default) =>
+        await _context.ClassSessions.Find(x => x.SubjectId == subjectId && x.Group == group).ToListAsync(ct);
+
+    public Task CreateAsync(ClassSession session, CancellationToken ct = default) =>
+        UserRepository.InsertAsync(_context.ClassSessions, session, ct);
+
+    public Task DeleteAllAsync(CancellationToken ct = default) =>
+        _context.ClassSessions.DeleteManyAsync(Builders<ClassSession>.Filter.Empty, ct);
+
+    public Task EnsureIndexesAsync(CancellationToken ct = default) =>
+        _context.ClassSessions.Indexes.CreateOneAsync(
+            new CreateIndexModel<ClassSession>(
+                Builders<ClassSession>.IndexKeys.Ascending(x => x.SubjectId).Ascending(x => x.Group),
+                new CreateIndexOptions { Name = "ix_sessions_subject_group" }),
+            cancellationToken: ct);
+}
+
 public class GradingSettingsRepository : IGradingSettingsRepository
 {
     private readonly MongoContext _context;

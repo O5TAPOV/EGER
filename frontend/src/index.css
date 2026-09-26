@@ -58,4 +58,157 @@ body {
   .nav-link-active {
     @apply nav-link bg-eger-green text-eger-gold hover:bg-eger-green;
   }
+  .limit-alert {
+    @apply whitespace-pre-line rounded-xl border border-red-800 bg-red-950/80 px-4 py-3 text-sm text-red-100;
+  }
+}
+
+.register-scroll {
+  --num: 46px;
+  --name: 220px;
+  --current: 96px;
+  --final: 100px;
+  --total: 84px;
+  --ects: 68px;
+  --status: 148px;
+  overflow: auto;
+  max-height: min(70vh, 760px);
+  border: 1px solid #234536;
+  border-radius: 12px;
+  background: #0c1a14;
+}
+
+.register-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  min-width: 100%;
+}
+
+.register-grid th,
+.register-grid td {
+  height: 34px;
+  padding: 0 6px;
+  border-right: 1px solid #234536;
+  border-bottom: 1px solid #234536;
+  background: #10241c;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.register-grid tbody tr:nth-child(even) td {
+  background: #163028;
+}
+
+.register-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: auto;
+  min-height: 64px;
+  padding: 6px 4px;
+  background: #0d1c16;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #d6d3d1;
+}
+
+.register-grid .col-num,
+.register-grid .col-name,
+.register-grid .col-current,
+.register-grid .col-final,
+.register-grid .col-total,
+.register-grid .col-ects,
+.register-grid .col-status {
+  position: sticky;
+  z-index: 2;
+}
+
+.register-grid thead .col-num,
+.register-grid thead .col-name,
+.register-grid thead .col-current,
+.register-grid thead .col-final,
+.register-grid thead .col-total,
+.register-grid thead .col-ects,
+.register-grid thead .col-status {
+  z-index: 6;
+}
+
+.register-grid .col-num {
+  left: 0;
+  width: var(--num);
+  min-width: var(--num);
+}
+
+.register-grid .col-name {
+  left: var(--num);
+  width: var(--name);
+  min-width: var(--name);
+  text-align: left;
+  box-shadow: 1px 0 0 #234536;
+}
+
+.register-grid .col-current {
+  right: calc(var(--final) + var(--total) + var(--ects) + var(--status));
+  width: var(--current);
+  min-width: var(--current);
+  box-shadow: -1px 0 0 #234536;
+}
+
+.register-grid .col-final {
+  right: calc(var(--total) + var(--ects) + var(--status));
+  width: var(--final);
+  min-width: var(--final);
+}
+
+.register-grid .col-total {
+  right: calc(var(--ects) + var(--status));
+  width: var(--total);
+  min-width: var(--total);
+}
+
+.register-grid .col-ects {
+  right: var(--status);
+  width: var(--ects);
+  min-width: var(--ects);
+}
+
+.register-grid .col-status {
+  right: 0;
+  width: var(--status);
+  min-width: var(--status);
+}
+
+.register-grid .lesson-col {
+  width: 118px;
+  min-width: 118px;
+  white-space: normal;
+}
+
+.register-cell-button,
+.register-cell-input,
+.register-cell-value {
+  display: block;
+  width: 100%;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: center;
+  font: inherit;
+  line-height: 32px;
+}
+
+.register-cell-button {
+  cursor: text;
+}
+
+.register-cell-input {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #e3b15a;
+}
+
+.register-grid td.is-editing {
+  box-shadow: inset 0 0 0 2px #e3b15a;
 }

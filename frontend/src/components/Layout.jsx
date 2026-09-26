@@ -5,6 +5,7 @@ import { roleLabel, useAuth } from "../context/AuthContext";
 const NAV = {
   Admin: [
     { to: "/admin", label: "Кабінет", end: true },
+    { to: "/admin/register", label: "Відомість" },
     { to: "/admin/at-risk", label: "Група ризику" },
   ],
   Professor: [

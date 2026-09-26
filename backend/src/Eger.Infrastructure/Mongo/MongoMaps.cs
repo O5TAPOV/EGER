@@ -27,6 +27,7 @@ public static class MongoMaps
         Register<Professor>();
         Register<Subject>();
         Register<Grade>();
+        Register<ClassSession>();
         Register<GradingSettings>();
         _registered = true;
     }

@@ -18,12 +18,12 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(100%-2rem,22rem)] flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(100%-2rem,36rem)] flex-col gap-2">
         {toasts.map((toast) => (
           <div
             key={toast.id}
             role="status"
-            className={`pointer-events-auto rounded-xl border px-4 py-3 text-sm shadow-lg ${
+            className={`pointer-events-auto whitespace-pre-line rounded-xl border px-4 py-3 text-sm shadow-lg ${
               toast.type === "error"
                 ? "border-red-800 bg-red-950 text-red-100"
                 : "border-eger-line bg-eger-panel text-stone-100"

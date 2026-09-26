@@ -1,6 +1,5 @@
-import { formatDate } from "../api/client";
-
 export function statusBadge(item) {
+  if (item.withinLimits === false) return <span className="badge-debt">перевищення</span>;
   if (item.debt) return <span className="badge-debt">борг</span>;
   if (!item.hasFinal) return <span className="badge-wait">набрано на зараз</span>;
   if (item.finalType === "Залік" || item.outcome === "зараховано") {
@@ -9,77 +8,10 @@ export function statusBadge(item) {
   return <span className="badge-ok">{item.nationalLabel || item.outcome}</span>;
 }
 
-export function JournalTable({ rows }) {
-  if (!rows?.length) {
-    return <p className="text-sm text-stone-400">У журналі ще немає рядків</p>;
-  }
-
-  return (
-    <div className="table-wrap">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Дата</th>
-            <th>Тип</th>
-            <th>Бали</th>
-            <th>Середній / набрано на зараз</th>
-            {rows.some((row) => row.professorName) && <th>Викладач</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>{formatDate(row.date)}</td>
-              <td>{row.gradeType}</td>
-              <td className="font-medium text-stone-100">{row.points ?? row.gradeValue}</td>
-              <td className="font-semibold text-eger-gold">{row.runningTotal}</td>
-              {rows.some((item) => item.professorName) && <td>{row.professorName}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export function JournalPanel({ journal, loading }) {
-  if (loading) return <p className="mt-4 text-sm text-stone-400">Завантаження журналу...</p>;
-  if (!journal) return null;
-
-  return (
-    <section className="card mt-4">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-stone-400">Журнал</p>
-          <h2 className="text-lg font-semibold">{journal.subjectTitle}</h2>
-          <p className="text-sm text-stone-400">
-            Викладає: {journal.professorNames?.join(", ") || "—"} · {journal.credits} кред.
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-wide text-stone-400">Середній / набрано на зараз</p>
-          <p className="text-3xl font-semibold text-eger-gold">
-            {journal.total}
-            <span className="text-base text-stone-400"> / 100</span>
-          </p>
-          <p className="text-xs text-stone-400">
-            поточні {journal.currentPoints}/{journal.currentMax}
-            {journal.hasFinal ? ` · підсумок ${journal.finalPoints}/${journal.finalMax}` : ` · підсумок ще не виставлено`}
-          </p>
-        </div>
-      </div>
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
-        {journal.ects && <span className="badge-wait">ECTS {journal.ects}</span>}
-        {journal.nationalLabel && <span className="badge-wait">{journal.nationalLabel}</span>}
-        {statusBadge(journal)}
-      </div>
-      <JournalTable rows={journal.rows} />
-    </section>
-  );
-}
-
 export default function StudentCardView({ card, activeSubjectId, onSubject }) {
-  const average = card.subjects.length === 0 ? "—" : card.averageTotal;
+  const average = card.subjects.length === 0 || (card.hasInvalidSubjects && card.subjects.every((item) => item.withinLimits === false))
+    ? "—"
+    : card.averageTotal;
 
   return (
     <div className="space-y-4">
@@ -96,6 +28,9 @@ export default function StudentCardView({ card, activeSubjectId, onSubject }) {
           <p className="mt-2 text-5xl font-semibold text-eger-gold">{average}</p>
           <p className="mt-2 text-sm text-stone-300">Середнє підсумків дисциплін за 100-бальною шкалою</p>
           <p className="text-xs text-stone-500">Поріг зарахування — {card.passThreshold}</p>
+          {card.hasInvalidSubjects && (
+            <p className="mt-2 text-xs text-red-200">Дисципліни з перевищенням ліміту не входять у середній бал.</p>
+          )}
         </article>
       </section>
 
@@ -129,6 +64,13 @@ export default function StudentCardView({ card, activeSubjectId, onSubject }) {
                       >
                         {subject.subjectTitle}
                       </button>
+                      {subject.warnings?.length > 0 && (
+                        <div className="mt-2 max-w-md space-y-1 text-xs text-red-200">
+                          {subject.warnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td>{subject.credits}</td>
                     <td>
@@ -138,14 +80,16 @@ export default function StudentCardView({ card, activeSubjectId, onSubject }) {
                       {subject.hasFinal ? `${subject.finalPoints}/${subject.finalMax}` : "—"}
                       {subject.finalType ? <span className="mt-1 block text-xs text-stone-500">{subject.finalType}</span> : null}
                     </td>
-                    <td className="text-lg font-semibold text-eger-gold">
+                    <td className={`text-lg font-semibold ${subject.withinLimits === false ? "text-red-300" : "text-eger-gold"}`}>
                       {subject.total}
                       <span className="text-xs font-normal text-stone-400"> / 100</span>
                     </td>
                     <td>{subject.ects || "—"}</td>
                     <td>
-                      {subject.nationalLabel || "—"}
-                      {subject.nationalScore ? <span className="ml-1 text-xs text-stone-500">{subject.nationalScore}</span> : null}
+                      {subject.withinLimits === false ? "—" : subject.nationalLabel || "—"}
+                      {subject.withinLimits !== false && subject.nationalScore ? (
+                        <span className="ml-1 text-xs text-stone-500">{subject.nationalScore}</span>
+                      ) : null}
                     </td>
                     <td>{statusBadge(subject)}</td>
                   </tr>

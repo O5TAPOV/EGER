@@ -14,6 +14,7 @@ public sealed class SubjectStanding
     public int Total { get; init; }
     public bool Debt { get; init; }
     public bool CannotReach { get; init; }
+    public bool WithinLimits { get; init; }
     public string? Ects { get; init; }
     public int? NationalScore { get; init; }
     public string? NationalLabel { get; init; }
@@ -63,6 +64,9 @@ public static class GradeBook
             .FirstOrDefault();
         var hasFinal = final is not null;
         var total = current + (final?.GradeValue ?? 0);
+        var withinLimits = current <= settings.CurrentMax
+            && (final?.GradeValue ?? 0) <= settings.FinalMax
+            && total <= 100;
         var debt = hasFinal && total < settings.PassThreshold;
         var cannotReach = !hasFinal && list.Count > 0 && current + settings.FinalMax < settings.PassThreshold;
 
@@ -71,7 +75,11 @@ public static class GradeBook
         string? nationalLabel = null;
         string outcome;
 
-        if (!hasFinal)
+        if (!withinLimits)
+        {
+            outcome = "перевищення";
+        }
+        else if (!hasFinal)
         {
             outcome = "набрано на зараз";
         }
@@ -100,6 +108,7 @@ public static class GradeBook
             Total = total,
             Debt = debt,
             CannotReach = cannotReach,
+            WithinLimits = withinLimits,
             Ects = ects,
             NationalScore = nationalScore,
             NationalLabel = nationalLabel,

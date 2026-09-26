@@ -193,7 +193,7 @@ public class AcademicService
             var withFinal = standings.Where(item => item.Standing.HasFinal).ToList();
             if (withFinal.Count == 0)
                 continue;
-            var passed = withFinal.Count(item => !item.Standing.Debt);
+            var passed = withFinal.Count(item => item.Standing.WithinLimits && !item.Standing.Debt);
             var share = Math.Round(passed * 100.0 / withFinal.Count, 1, MidpointRounding.AwayFromZero);
             if (share < 50)
             {
@@ -252,10 +252,13 @@ public class AcademicService
                 Ects = standing.Ects,
                 NationalScore = standing.NationalScore,
                 NationalLabel = standing.NationalLabel,
-                Outcome = standing.Outcome
+                Outcome = standing.Outcome,
+                WithinLimits = standing.WithinLimits,
+                Warnings = PointGuard.Describe(student.FullName, standing, settings)
             });
         }
 
+        var validTotals = scores.Where(score => score.WithinLimits).Select(score => score.Total).ToList();
         return new StudentCardResponse
         {
             StudentId = student.Id,
@@ -263,7 +266,8 @@ public class AcademicService
             Group = student.Group,
             StudentCardNumber = student.StudentCardNumber,
             EnrollmentYear = student.EnrollmentYear,
-            AverageTotal = GradeBook.Average(scores.Select(score => score.Total)),
+            AverageTotal = GradeBook.Average(validTotals),
+            HasInvalidSubjects = scores.Any(score => !score.WithinLimits),
             PassThreshold = settings.PassThreshold,
             CurrentMax = settings.CurrentMax,
             FinalMax = settings.FinalMax,

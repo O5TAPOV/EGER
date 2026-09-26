@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IProfessorRepository, ProfessorRepository>();
         services.AddScoped<ISubjectRepository, SubjectRepository>();
         services.AddScoped<IGradeRepository, GradeRepository>();
+        services.AddScoped<IClassSessionRepository, ClassSessionRepository>();
         services.AddScoped<IGradingSettingsRepository, GradingSettingsRepository>();
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
         services.AddSingleton<IConnectionMultiplexer>(_ =>

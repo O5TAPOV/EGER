@@ -72,6 +72,15 @@ public interface IGradeRepository
     Task EnsureIndexesAsync(CancellationToken ct = default);
 }
 
+public interface IClassSessionRepository
+{
+    Task<ClassSession?> GetByIdAsync(string id, CancellationToken ct = default);
+    Task<IReadOnlyList<ClassSession>> GetBySubjectGroupAsync(string subjectId, string group, CancellationToken ct = default);
+    Task CreateAsync(ClassSession session, CancellationToken ct = default);
+    Task DeleteAllAsync(CancellationToken ct = default);
+    Task EnsureIndexesAsync(CancellationToken ct = default);
+}
+
 public interface IGradingSettingsRepository
 {
     Task<Eger.Domain.Entities.GradingSettings> GetAsync(CancellationToken ct = default);

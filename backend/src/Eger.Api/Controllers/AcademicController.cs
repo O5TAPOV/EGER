@@ -13,8 +13,13 @@ namespace Eger.Api.Controllers;
 public class AcademicController : ControllerBase
 {
     private readonly AcademicService _academic;
+    private readonly RegisterService _register;
 
-    public AcademicController(AcademicService academic) => _academic = academic;
+    public AcademicController(AcademicService academic, RegisterService register)
+    {
+        _academic = academic;
+        _register = register;
+    }
 
     [HttpGet("card/me")]
     [Authorize(Roles = Roles.Student)]
@@ -46,6 +51,30 @@ public class AcademicController : ControllerBase
         CancellationToken ct)
     {
         return Ok(await _academic.StatementAsync(HttpActor.Current(User), subjectId, group, ct));
+    }
+
+    [HttpGet("register")]
+    public async Task<ActionResult<RegisterResponse>> Register(
+        [FromQuery] string subjectId,
+        [FromQuery] string? group,
+        [FromQuery] string? studentId,
+        CancellationToken ct)
+    {
+        return Ok(await _register.GetAsync(HttpActor.Current(User), subjectId, group, studentId, ct));
+    }
+
+    [HttpPost("register/columns")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> AddColumn([FromBody] AddColumnRequest request, CancellationToken ct)
+    {
+        return Ok(await _register.AddColumnAsync(HttpActor.Current(User), request, ct));
+    }
+
+    [HttpPut("register/cells")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<RegisterResponse>> SetCell([FromBody] SetCellRequest request, CancellationToken ct)
+    {
+        return Ok(await _register.SetCellAsync(HttpActor.Current(User), request, ct));
     }
 
     [HttpGet("at-risk")]

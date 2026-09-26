@@ -246,12 +246,12 @@ public class GradeService
         var finals = rows.Where(row => GradeTypes.IsFinal(row.GradeType)).ToList();
         if (finals.Count > 1)
             throw new AppException(400, "Підсумок для цього студента з дисципліни можна виставити лише один раз");
-        if (finals.Any(row => row.GradeValue > settings.FinalMax))
-            throw new AppException(400, $"Підсумок не може перевищувати {settings.FinalMax} балів");
 
-        var currentSum = rows.Where(row => GradeTypes.IsCurrent(row.GradeType)).Sum(row => row.GradeValue);
-        if (currentSum > settings.CurrentMax)
-            throw new AppException(400, $"Сума поточних балів не може перевищувати {settings.CurrentMax}");
+        var student = await _students.GetByIdAsync(incoming.StudentId, ct);
+        var standing = GradeBook.Evaluate(rows, settings);
+        var messages = PointGuard.Describe(student?.FullName ?? "студента", standing, settings);
+        if (messages.Count > 0)
+            throw new AppException(400, PointGuard.Join(messages));
     }
 
     private async Task<Professor> ResolveProfessorAsync(Actor actor, Subject subject, string? requestedProfessorId, CancellationToken ct)

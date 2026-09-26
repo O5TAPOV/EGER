@@ -16,6 +16,7 @@ public class SeedService
     private readonly IProfessorRepository _professors;
     private readonly ISubjectRepository _subjects;
     private readonly IGradeRepository _grades;
+    private readonly IClassSessionRepository _sessions;
     private readonly IPasswordHasher _hasher;
 
     public SeedService(
@@ -24,6 +25,7 @@ public class SeedService
         IProfessorRepository professors,
         ISubjectRepository subjects,
         IGradeRepository grades,
+        IClassSessionRepository sessions,
         IPasswordHasher hasher)
     {
         _users = users;
@@ -31,6 +33,7 @@ public class SeedService
         _professors = professors;
         _subjects = subjects;
         _grades = grades;
+        _sessions = sessions;
         _hasher = hasher;
     }
 
@@ -55,6 +58,7 @@ public class SeedService
             }
 
             await _grades.DeleteAllAsync(ct);
+            await _sessions.DeleteAllAsync(ct);
             var written = await WriteJournalAsync(ct);
             return new SeedResult
             {
@@ -125,6 +129,7 @@ public class SeedService
                 professorByEmail[user.Email] = professor;
         }
 
+        var sessionIds = new Dictionary<(string SubjectId, string Group, DateTime Date, string Type), string>();
         var count = 0;
         foreach (var row in DemoRows())
         {
@@ -134,11 +139,61 @@ public class SeedService
                 continue;
             if (!professorByEmail.TryGetValue(row.ProfessorEmail, out var professor))
                 continue;
-            count += await AddGradeAsync(student, subject, professor, row.Points, row.Type, row.Date, ct);
+
+            var key = (subject.Id, student.Group, row.Date, row.Type);
+            if (!sessionIds.TryGetValue(key, out var sessionId))
+            {
+                var session = new ClassSession
+                {
+                    SubjectId = subject.Id,
+                    Group = student.Group,
+                    Date = row.Date,
+                    GradeType = row.Type,
+                    MaxPoints = ColumnMax(row.SubjectTitle, row.Type)
+                };
+                await _sessions.CreateAsync(session, ct);
+                sessionId = session.Id;
+                sessionIds[key] = sessionId;
+            }
+
+            count += await AddGradeAsync(student, subject, professor, row.Points, row.Type, row.Date, sessionId, ct);
         }
 
         return count;
     }
+
+    private static int ColumnMax(string subject, string type) => (subject, type) switch
+    {
+        ("Теорія баз даних", GradeTypes.Attendance) => 12,
+        ("Теорія баз даних", GradeTypes.Homework) => 20,
+        ("Теорія баз даних", GradeTypes.Practical) => 25,
+        ("Теорія баз даних", GradeTypes.Module) => 25,
+        ("Теорія баз даних", GradeTypes.Exam) => 20,
+        ("Алгоритми та структури даних", GradeTypes.Attendance) => 12,
+        ("Алгоритми та структури даних", GradeTypes.Homework) => 20,
+        ("Алгоритми та структури даних", GradeTypes.Practical) => 20,
+        ("Алгоритми та структури даних", GradeTypes.Module) => 20,
+        ("Алгоритми та структури даних", GradeTypes.Exam) => 20,
+        ("Веб-технології", GradeTypes.Attendance) => 10,
+        ("Веб-технології", GradeTypes.Homework) => 15,
+        ("Веб-технології", GradeTypes.Practical) => 15,
+        ("Веб-технології", GradeTypes.Credit) => 20,
+        ("Операційні системи", GradeTypes.Attendance) => 15,
+        ("Операційні системи", GradeTypes.Homework) => 20,
+        ("Операційні системи", GradeTypes.Practical) => 20,
+        ("Операційні системи", GradeTypes.Module) => 25,
+        ("Операційні системи", GradeTypes.Exam) => 20,
+        ("Комп'ютерні мережі", GradeTypes.Attendance) => 10,
+        ("Комп'ютерні мережі", GradeTypes.Homework) => 15,
+        ("Комп'ютерні мережі", GradeTypes.Practical) => 15,
+        ("Комп'ютерні мережі", GradeTypes.Exam) => 20,
+        ("Дискретна математика", GradeTypes.Attendance) => 12,
+        ("Дискретна математика", GradeTypes.Homework) => 20,
+        ("Дискретна математика", GradeTypes.Practical) => 20,
+        ("Дискретна математика", GradeTypes.Module) => 20,
+        ("Дискретна математика", GradeTypes.Exam) => 20,
+        _ => 10
+    };
 
     private static IEnumerable<(string StudentEmail, string SubjectTitle, string ProfessorEmail, int Points, string Type, DateTime Date)> DemoRows()
     {
@@ -295,6 +350,7 @@ public class SeedService
         int value,
         string gradeType,
         DateTime date,
+        string sessionId,
         CancellationToken ct)
     {
         await _grades.CreateAsync(new Grade
@@ -304,7 +360,8 @@ public class SeedService
             ProfessorId = professor.Id,
             GradeValue = value,
             GradeType = gradeType,
-            Date = date
+            Date = date,
+            SessionId = sessionId
         }, ct);
         return 1;
     }

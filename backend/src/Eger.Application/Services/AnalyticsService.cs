@@ -46,7 +46,7 @@ public class AnalyticsService
             Subjects = await _subjects.CountAsync(ct),
             Grades = grades.Count,
             AverageScore = GradeBook.Average(standings.Select(item => item.Total)),
-            PassRate = Share(withFinal.Count(item => !item.Debt), withFinal.Count),
+            PassRate = Share(withFinal.Count(item => item.WithinLimits && !item.Debt), withFinal.Count),
             PassThreshold = settings.PassThreshold
         };
     }
@@ -82,7 +82,7 @@ public class AnalyticsService
                 : students.Count,
             GradeCount = grades.Count,
             AverageScore = GradeBook.Average(standings.Select(item => item.Total)),
-            PassRate = Share(withFinal.Count(item => !item.Debt), withFinal.Count),
+            PassRate = Share(withFinal.Count(item => item.WithinLimits && !item.Debt), withFinal.Count),
             PassThreshold = settings.PassThreshold,
             Distribution = GradeBook.Bands
                 .Select(band => new DistributionBucket
@@ -141,7 +141,7 @@ public class AnalyticsService
             FullName = student.FullName,
             Group = student.Group,
             AverageScore = GradeBook.Average(standings.Select(item => item.Total)),
-            PassRate = Share(withFinal.Count(item => !item.Debt), withFinal.Count),
+            PassRate = Share(withFinal.Count(item => item.WithinLimits && !item.Debt), withFinal.Count),
             PassThreshold = settings.PassThreshold,
             GradeCount = grades.Count,
             Transcript = grades

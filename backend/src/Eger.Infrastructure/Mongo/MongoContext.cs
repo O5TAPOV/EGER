@@ -31,5 +31,6 @@ public sealed class MongoContext
     public IMongoCollection<Professor> Professors => Database.GetCollection<Professor>("Professors");
     public IMongoCollection<Subject> Subjects => Database.GetCollection<Subject>("Subjects");
     public IMongoCollection<Grade> Grades => Database.GetCollection<Grade>("Grades");
+    public IMongoCollection<ClassSession> ClassSessions => Database.GetCollection<ClassSession>("ClassSessions");
     public IMongoCollection<GradingSettings> GradingSettings => Database.GetCollection<GradingSettings>("GradingSettings");
 }

@@ -1,20 +1,16 @@
 namespace Eger.Domain.Entities;
 
-public class Grade
+public class ClassSession
 {
     public string Id { get; set; } = null!;
 
-    public string StudentId { get; set; } = null!;
-
     public string SubjectId { get; set; } = null!;
 
-    public string ProfessorId { get; set; } = null!;
-
-    public int GradeValue { get; set; }
+    public string Group { get; set; } = null!;
 
     public DateTime Date { get; set; }
 
     public string GradeType { get; set; } = null!;
 
-    public string? SessionId { get; set; }
+    public int MaxPoints { get; set; }
 }

@@ -6,6 +6,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import AtRiskPage from "./pages/AtRiskPage";
 import LoginPage from "./pages/LoginPage";
 import ProfessorDashboard from "./pages/ProfessorDashboard";
+import RegisterPage from "./pages/RegisterPage";
 import StudentCardPage from "./pages/StudentCardPage";
 import StudentDashboard from "./pages/StudentDashboard";
 
@@ -38,6 +39,14 @@ export default function App() {
               element={
                 <Protected role="Admin">
                   <StudentCardPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/admin/register"
+              element={
+                <Protected role="Admin">
+                  <RegisterPage subjectsPath="/subjects" linkBase="/admin/students" />
                 </Protected>
               }
             />

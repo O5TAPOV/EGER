@@ -36,6 +36,8 @@ public class SubjectScoreResponse
     public bool HasFinal { get; set; }
     public bool Debt { get; set; }
     public bool CannotReach { get; set; }
+    public bool WithinLimits { get; set; }
+    public List<string> Warnings { get; set; } = [];
     public string? Ects { get; set; }
     public int? NationalScore { get; set; }
     public string? NationalLabel { get; set; }
@@ -50,6 +52,7 @@ public class StudentCardResponse
     public string StudentCardNumber { get; set; } = "";
     public int EnrollmentYear { get; set; }
     public double AverageTotal { get; set; }
+    public bool HasInvalidSubjects { get; set; }
     public int PassThreshold { get; set; }
     public int CurrentMax { get; set; }
     public int FinalMax { get; set; }
@@ -151,4 +154,82 @@ public class AtRiskResponse
     public int PassThreshold { get; set; }
     public List<AtRiskStudentResponse> Students { get; set; } = [];
     public List<AtRiskSubjectResponse> Subjects { get; set; } = [];
+}
+
+public class RegisterColumnResponse
+{
+    public string Id { get; set; } = "";
+    public DateTime Date { get; set; }
+    public string GradeType { get; set; } = "";
+    public int MaxPoints { get; set; }
+    public bool IsFinal { get; set; }
+}
+
+public class RegisterCellResponse
+{
+    public string SessionId { get; set; } = "";
+    public int? Points { get; set; }
+}
+
+public class RegisterRowResponse
+{
+    public int Number { get; set; }
+    public string StudentId { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public int CurrentPoints { get; set; }
+    public int? FinalPoints { get; set; }
+    public int Total { get; set; }
+    public bool HasMarks { get; set; }
+    public bool HasFinal { get; set; }
+    public bool Debt { get; set; }
+    public bool WithinLimits { get; set; }
+    public string? Ects { get; set; }
+    public string Status { get; set; } = "";
+    public List<string> Warnings { get; set; } = [];
+    public List<RegisterCellResponse> Cells { get; set; } = [];
+}
+
+public class RegisterResponse
+{
+    public string SubjectId { get; set; } = "";
+    public string SubjectTitle { get; set; } = "";
+    public string Group { get; set; } = "";
+    public int Credits { get; set; }
+    public int CurrentMax { get; set; }
+    public int FinalMax { get; set; }
+    public int PassThreshold { get; set; }
+    public bool CanEdit { get; set; }
+    public bool HasFinalColumn { get; set; }
+    public double? ClassAverage { get; set; }
+    public int DebtCount { get; set; }
+    public List<RegisterColumnResponse> Columns { get; set; } = [];
+    public List<RegisterRowResponse> Rows { get; set; } = [];
+}
+
+public class AddColumnRequest
+{
+    [Required(ErrorMessage = "Дисципліна обов'язкова")]
+    public string SubjectId { get; set; } = "";
+
+    [Required(ErrorMessage = "Група обов'язкова")]
+    public string Group { get; set; } = "";
+
+    public DateTime? Date { get; set; }
+
+    [Required(ErrorMessage = "Тип колонки обов'язковий")]
+    public string GradeType { get; set; } = "";
+
+    [Range(1, 100, ErrorMessage = "Максимум колонки має бути від 1 до 100")]
+    public int MaxPoints { get; set; }
+}
+
+public class SetCellRequest
+{
+    [Required(ErrorMessage = "Колонка обов'язкова")]
+    public string SessionId { get; set; } = "";
+
+    [Required(ErrorMessage = "Студент обов'язковий")]
+    public string StudentId { get; set; } = "";
+
+    public int? Points { get; set; }
 }
