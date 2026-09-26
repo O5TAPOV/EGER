@@ -29,6 +29,10 @@ public class SubjectScoreResponse
     public List<string> ProfessorNames { get; set; } = [];
     public int CurrentPoints { get; set; }
     public int CurrentMax { get; set; }
+    public int? AttemptPoints { get; set; }
+    public int? RetakePoints { get; set; }
+    public string RetakeDate { get; set; } = "";
+    public bool HasRetake { get; set; }
     public int? FinalPoints { get; set; }
     public int FinalMax { get; set; }
     public string? FinalType { get; set; }
@@ -192,6 +196,9 @@ public class RegisterRowResponse
     public string FullName { get; set; } = "";
     public int CurrentPoints { get; set; }
     public int? FinalPoints { get; set; }
+    public int? RetakePoints { get; set; }
+    public string RetakeDate { get; set; } = "";
+    public bool HasRetake { get; set; }
     public int Total { get; set; }
     public bool ShowScores { get; set; }
     public bool HasFinal { get; set; }
@@ -262,10 +269,57 @@ public class SetCellRequest
 
     public bool FinalColumn { get; set; }
 
+    public bool Retake { get; set; }
+
+    public string? RetakeDate { get; set; }
+
+    public bool ConfirmReplace { get; set; }
+
     [Required(ErrorMessage = "Студент обов'язковий")]
     public string StudentId { get; set; } = "";
 
     public string? Mark { get; set; }
+}
+
+public class GroupOptionResponse
+{
+    public string Code { get; set; } = "";
+    public string Specialty { get; set; } = "";
+}
+
+public class GroupPassportStudentResponse
+{
+    public string StudentId { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string StudentCardNumber { get; set; } = "";
+    public bool InDebt { get; set; }
+}
+
+public class GroupPassportSubjectResponse
+{
+    public string SubjectId { get; set; } = "";
+    public string Title { get; set; } = "";
+    public int Credits { get; set; }
+    public string ControlForm { get; set; } = "";
+    public List<string> ProfessorNames { get; set; } = [];
+}
+
+public class GroupPassportDebtResponse
+{
+    public string StudentId { get; set; } = "";
+    public string FullName { get; set; } = "";
+    public string SubjectTitle { get; set; } = "";
+    public int Total { get; set; }
+}
+
+public class GroupPassportResponse
+{
+    public string Code { get; set; } = "";
+    public string Specialty { get; set; } = "";
+    public int PassThreshold { get; set; }
+    public List<GroupPassportStudentResponse> Students { get; set; } = [];
+    public List<GroupPassportSubjectResponse> Subjects { get; set; } = [];
+    public List<GroupPassportDebtResponse> Debtors { get; set; } = [];
 }
 
 public class UpdateSheetRequest

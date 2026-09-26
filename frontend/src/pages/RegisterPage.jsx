@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, errorText } from "../api/client";
 import DarkSelect from "../components/DarkSelect";
 import Gradebook from "../components/Gradebook";
@@ -11,7 +12,7 @@ function groupsOf(subject) {
   return Array.isArray(subject?.groups) ? subject.groups : [];
 }
 
-export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = false }) {
+export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = false, groupPassportPath = "" }) {
   const { push } = useToast();
   const [subjects, setSubjects] = useState([]);
   const [subjectId, setSubjectId] = useState("");
@@ -22,28 +23,20 @@ export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = f
     api.get(subjectsPath)
       .then(({ data }) => {
         setSubjects(data);
-        const first = data.find((subject) => groupsOf(subject).length > 0) || data[0];
-        if (first) {
-          setSubjectId(first.id);
-          setGroup(groupsOf(first)[0] || "");
-        }
+        const codes = [...new Set(data.flatMap(groupsOf))].sort((a, b) => a.localeCompare(b, "uk"));
+        const firstGroup = codes[0] || "";
+        const firstSubject = data.find((subject) => groupsOf(subject).includes(firstGroup));
+        setGroup(firstGroup);
+        setSubjectId(firstSubject?.id || "");
       })
       .catch((error) => push(errorText(error, "Не вдалося завантажити дисципліни"), "error"))
       .finally(() => setLoading(false));
   }, [subjectsPath, push]);
 
-  const selected = subjects.find((subject) => subject.id === subjectId);
-  const groupOptions = groupsOf(selected);
+  const groupOptions = [...new Set(subjects.flatMap(groupsOf))].sort((a, b) => a.localeCompare(b, "uk"));
   const subjectOptions = group
     ? subjects.filter((subject) => groupsOf(subject).includes(group))
-    : subjects;
-
-  const chooseSubject = (nextId) => {
-    const next = subjects.find((subject) => subject.id === nextId);
-    const allowed = groupsOf(next);
-    setSubjectId(nextId);
-    setGroup((current) => (allowed.includes(current) ? current : (allowed[0] || "")));
-  };
+    : [];
 
   const chooseGroup = (nextGroup) => {
     setGroup(nextGroup);
@@ -64,16 +57,7 @@ export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = f
         </section>
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap gap-3">
-            <Field label="Дисципліна">
-              <DarkSelect
-                className="min-w-64"
-                value={subjectId}
-                onChange={chooseSubject}
-                placeholder="Оберіть дисципліну"
-                options={subjectOptions.map((subject) => ({ value: subject.id, label: subject.title }))}
-              />
-            </Field>
+          <div className="flex flex-wrap items-end gap-3">
             <Field label="Група">
               <DarkSelect
                 className="min-w-40"
@@ -84,6 +68,21 @@ export default function RegisterPage({ subjectsPath, linkBase, showTwoFactor = f
                 options={groupOptions.map((item) => ({ value: item, label: item }))}
               />
             </Field>
+            <Field label="Дисципліна">
+              <DarkSelect
+                className="min-w-64"
+                value={subjectId}
+                onChange={setSubjectId}
+                placeholder={subjectOptions.length === 0 ? "У групі немає дисциплін" : "Оберіть дисципліну"}
+                disabled={subjectOptions.length === 0}
+                options={subjectOptions.map((subject) => ({ value: subject.id, label: subject.title }))}
+              />
+            </Field>
+            {groupPassportPath && group && (
+              <Link className="pb-2 text-sm text-eger-gold hover:underline" to={`${groupPassportPath}?code=${encodeURIComponent(group)}`}>
+                Паспорт групи
+              </Link>
+            )}
           </div>
           {subjectId && group && <Gradebook subjectId={subjectId} group={group} linkBase={linkBase} allowColumn />}
           {showTwoFactor && <TwoFactorSettings />}

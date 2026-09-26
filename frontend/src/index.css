@@ -338,6 +338,25 @@ body {
   color: #fca5a5;
 }
 
+.sheet-grid .retake-col {
+  min-width: 9.5rem;
+  vertical-align: top;
+}
+
+.retake-cell,
+.retake-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.retake-form .field {
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
 .sheet-grid .sum-col {
   width: 88px;
   min-width: 88px;

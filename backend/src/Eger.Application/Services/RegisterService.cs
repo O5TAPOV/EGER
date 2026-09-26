@@ -1,3 +1,4 @@
+using System.Globalization;
 using Eger.Application.Abstractions;
 using Eger.Application.Common;
 using Eger.Application.Dtos;
@@ -292,14 +293,18 @@ public class RegisterService
             throw new AppException(403, "Недостатньо прав");
         Ids.Ensure(request.StudentId);
 
-        if (request.FinalColumn)
+        if (request.FinalColumn || request.Retake)
         {
             Ids.Ensure(request.SubjectId);
             var subject = await RequireSubjectAsync(request.SubjectId!, ct);
             var professor = await EnsureTeachesAsync(actor, subject, ct);
             var student = await _students.GetByIdAsync(request.StudentId, ct)
                 ?? throw new AppException(404, "Студента не знайдено");
-            await SaveFinalAsync(subject, student, professor.Id, request.Mark, ct);
+            EnsureSubjectGroup(subject, student.Group);
+            if (request.Retake)
+                await SaveRetakeAsync(subject, student, professor.Id, request, ct);
+            else
+                await SaveFinalAsync(subject, student, professor.Id, request.Mark, ct);
             return await BuildGroupAsync(subject, student.Group, ct);
         }
 
@@ -460,7 +465,10 @@ public class RegisterService
         var own = (await _grades.GetByStudentAsync(student.Id, ct))
             .Where(grade => grade.SubjectId == subject.Id)
             .ToList();
-        var finals = own.Where(grade => GradeTypes.IsFinal(grade.GradeType)).OrderByDescending(grade => grade.Date).ToList();
+        var finals = own.Where(grade => GradeTypes.IsFinal(grade.GradeType))
+            .OrderBy(grade => grade.Date)
+            .ThenBy(grade => grade.Id, StringComparer.Ordinal)
+            .ToList();
         if (parsed.Clear)
         {
             foreach (var grade in finals)
@@ -471,20 +479,20 @@ public class RegisterService
         var sheet = await EnsureSheetAsync(subject, student.Group, ct);
         var gradeType = EffectiveControlForm(subject, sheet) == "Залік" ? GradeTypes.Credit : GradeTypes.Exam;
         var settings = await _settings.GetAsync(ct);
-        var others = own.Where(grade => !GradeTypes.IsFinal(grade.GradeType)).ToList();
-        var preview = new List<Grade>(others)
+        var retake = own.FirstOrDefault(grade => GradeTypes.IsRetake(grade.GradeType));
+        var preview = own.Where(grade => !GradeTypes.IsFinal(grade.GradeType) && !GradeTypes.IsRetake(grade.GradeType)).ToList();
+        preview.Add(retake ?? new Grade
         {
-            new()
-            {
-                StudentId = student.Id,
-                SubjectId = subject.Id,
-                GradeType = gradeType,
-                GradeValue = parsed.Points,
-                Date = DateTime.UtcNow
-            }
-        };
+            StudentId = student.Id,
+            SubjectId = subject.Id,
+            GradeType = gradeType,
+            GradeValue = parsed.Points,
+            Date = DateTime.UtcNow
+        });
         var standing = GradeBook.Evaluate(preview, settings);
         var messages = PointGuard.Describe(student.FullName, standing, settings);
+        if (retake is not null && parsed.Points > settings.FinalMax)
+            messages.Add(PointGuard.Final(student.FullName, parsed.Points, settings.FinalMax));
         if (messages.Count > 0)
             throw new AppException(400, PointGuard.Join(messages));
 
@@ -507,11 +515,82 @@ public class RegisterService
             keeper.GradeType = gradeType;
             keeper.ProfessorId = professorId;
             keeper.Absent = false;
-            keeper.Date = DateTime.UtcNow;
             await _grades.UpdateAsync(keeper, ct);
             foreach (var extra in finals.Skip(1))
                 await _grades.DeleteAsync(extra.Id, ct);
         }
+    }
+
+    private async Task SaveRetakeAsync(Subject subject, Student student, string professorId, SetCellRequest request, CancellationToken ct)
+    {
+        var own = (await _grades.GetByStudentAsync(student.Id, ct))
+            .Where(grade => grade.SubjectId == subject.Id)
+            .ToList();
+        if (!own.Any(grade => GradeTypes.IsFinal(grade.GradeType)))
+            throw new AppException(400, "Спочатку поставте підсумок.");
+
+        var existing = own.Where(grade => GradeTypes.IsRetake(grade.GradeType))
+            .OrderByDescending(grade => grade.Date)
+            .ThenBy(grade => grade.Id, StringComparer.Ordinal)
+            .ToList();
+        var parsed = ParseMark(request.Mark, allowsAbsence: false);
+        if (existing.Count > 0 && !request.ConfirmReplace)
+            throw new AppException(400, "Перескладання вже є. Щоб поставити інше, підтвердьте видалення наявного.");
+        if (parsed.Clear)
+        {
+            if (existing.Count == 0)
+                return;
+            foreach (var grade in existing)
+                await _grades.DeleteAsync(grade.Id, ct);
+            return;
+        }
+
+        var date = ParseRetakeDate(request.RetakeDate);
+        var settings = await _settings.GetAsync(ct);
+        var preview = own.Where(grade => !GradeTypes.IsRetake(grade.GradeType)).ToList();
+        preview.Add(new Grade
+        {
+            StudentId = student.Id,
+            SubjectId = subject.Id,
+            GradeType = GradeTypes.Retake,
+            GradeValue = parsed.Points,
+            Date = date
+        });
+        var standing = GradeBook.Evaluate(preview, settings);
+        var messages = PointGuard.Describe(student.FullName, standing, settings);
+        if (messages.Count > 0)
+            throw new AppException(400, PointGuard.Join(messages));
+
+        var keeper = existing.FirstOrDefault();
+        if (keeper is null)
+        {
+            await _grades.CreateAsync(new Grade
+            {
+                StudentId = student.Id,
+                SubjectId = subject.Id,
+                ProfessorId = professorId,
+                GradeValue = parsed.Points,
+                GradeType = GradeTypes.Retake,
+                Date = date
+            }, ct);
+            return;
+        }
+
+        keeper.GradeValue = parsed.Points;
+        keeper.Date = date;
+        keeper.ProfessorId = professorId;
+        keeper.Absent = false;
+        await _grades.UpdateAsync(keeper, ct);
+        foreach (var extra in existing.Skip(1))
+            await _grades.DeleteAsync(extra.Id, ct);
+    }
+
+    private static DateTime ParseRetakeDate(string? text)
+    {
+        var value = text?.Trim() ?? "";
+        if (!DateTime.TryParseExact(value, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date))
+            throw new AppException(400, "Дата перескладання має бути у форматі дд.мм.рррр.");
+        return DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
     }
 
     private async Task<JournalSheet> EnsureSheetAsync(Subject subject, string group, CancellationToken ct)
@@ -602,10 +681,13 @@ public class RegisterService
                 StudentId = student.Id,
                 FullName = student.FullName,
                 CurrentPoints = standing.CurrentPoints,
-                FinalPoints = standing.HasFinal ? standing.FinalPoints : null,
+                FinalPoints = standing.HasAttempt ? standing.AttemptPoints : null,
+                RetakePoints = standing.HasRetake ? standing.RetakePoints : null,
+                RetakeDate = standing.RetakeDate is DateTime retakeDate ? retakeDate.ToString("dd.MM.yyyy") : "",
+                HasRetake = standing.HasRetake,
                 Total = standing.Total,
                 ShowScores = showScores,
-                HasFinal = standing.HasFinal,
+                HasFinal = standing.HasAttempt,
                 Debt = standing.Debt,
                 WithinLimits = standing.WithinLimits,
                 Ects = standing.Ects,

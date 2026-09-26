@@ -109,6 +109,20 @@ public class AcademicController : ControllerBase
         return Ok(await _register.UpdateLegendAsync(HttpActor.Current(User), request, ct));
     }
 
+    [HttpGet("teaching-groups")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<IReadOnlyList<GroupOptionResponse>>> TeachingGroups(CancellationToken ct)
+    {
+        return Ok(await _academic.TeachingGroupsAsync(HttpActor.Current(User), ct));
+    }
+
+    [HttpGet("group-passport")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
+    public async Task<ActionResult<GroupPassportResponse>> GroupPassport([FromQuery] string group, CancellationToken ct)
+    {
+        return Ok(await _academic.GroupPassportAsync(HttpActor.Current(User), group, ct));
+    }
+
     [HttpGet("register/groups")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.Professor}")]
     public async Task<ActionResult<IReadOnlyList<string>>> RegisterGroups([FromQuery] string subjectId, CancellationToken ct)

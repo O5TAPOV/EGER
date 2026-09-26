@@ -10,6 +10,7 @@ const NAV = {
   ],
   Professor: [
     { to: "/professor", label: "Відомість", end: true },
+    { to: "/professor/group", label: "Паспорт групи" },
     { to: "/professor/at-risk", label: "Група ризику" },
   ],
   Student: [{ to: "/student", label: "Картка", end: true }],

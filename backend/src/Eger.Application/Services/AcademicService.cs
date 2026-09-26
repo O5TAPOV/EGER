@@ -14,6 +14,7 @@ public class AcademicService
     private readonly ISubjectRepository _subjects;
     private readonly IGradeRepository _grades;
     private readonly IClassSessionRepository _sessions;
+    private readonly IJournalSheetRepository _sheets;
     private readonly IGradingSettingsRepository _settings;
 
     public AcademicService(
@@ -22,6 +23,7 @@ public class AcademicService
         ISubjectRepository subjects,
         IGradeRepository grades,
         IClassSessionRepository sessions,
+        IJournalSheetRepository sheets,
         IGradingSettingsRepository settings)
     {
         _students = students;
@@ -29,6 +31,7 @@ public class AcademicService
         _subjects = subjects;
         _grades = grades;
         _sessions = sessions;
+        _sheets = sheets;
         _settings = settings;
     }
 
@@ -256,6 +259,10 @@ public class AcademicService
                 ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList(),
                 CurrentPoints = standing.CurrentPoints,
                 CurrentMax = settings.CurrentMax,
+                AttemptPoints = standing.HasAttempt ? standing.AttemptPoints : null,
+                RetakePoints = standing.HasRetake ? standing.RetakePoints : null,
+                RetakeDate = standing.RetakeDate is DateTime retakeDate ? retakeDate.ToString("dd.MM.yyyy") : "",
+                HasRetake = standing.HasRetake,
                 FinalPoints = standing.HasFinal ? standing.FinalPoints : null,
                 FinalMax = settings.FinalMax,
                 FinalType = standing.FinalType,
@@ -327,6 +334,104 @@ public class AcademicService
         var professor = await _professors.GetByUserIdAsync(actor.UserId, ct)
             ?? throw new AppException(403, "Профіль викладача не знайдено");
         return await _subjects.GetByProfessorAsync(professor.Id, ct);
+    }
+
+    public async Task<IReadOnlyList<GroupOptionResponse>> TeachingGroupsAsync(Actor actor, CancellationToken ct = default)
+    {
+        if (actor.Role is not (Roles.Admin or Roles.Professor))
+            throw new AppException(403, "Недостатньо прав");
+        var subjects = await VisibleSubjectsAsync(actor, ct);
+        var codes = subjects
+            .SelectMany(subject => subject.Groups ?? [])
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(code => code, StringComparer.CurrentCulture)
+            .ToList();
+        var options = new List<GroupOptionResponse>();
+        foreach (var code in codes)
+        {
+            var sheets = await _sheets.GetByGroupAsync(code, ct);
+            options.Add(new GroupOptionResponse
+            {
+                Code = code,
+                Specialty = GroupSpecialties.Resolve(code, sheets.Select(sheet => sheet.Specialty))
+            });
+        }
+
+        return options;
+    }
+
+    public async Task<GroupPassportResponse> GroupPassportAsync(Actor actor, string? code, CancellationToken ct = default)
+    {
+        if (actor.Role is not (Roles.Admin or Roles.Professor))
+            throw new AppException(403, "Недостатньо прав");
+        var group = code?.Trim() ?? "";
+        if (group.Length == 0)
+            throw new AppException(400, "Вкажіть групу");
+
+        var visible = await VisibleSubjectsAsync(actor, ct);
+        if (actor.Role == Roles.Professor && !visible.Any(subject => SubjectTaughtTo(subject, group)))
+            throw new AppException(403, "Ви не викладаєте в цій групі");
+        var taught = (await _subjects.GetAllAsync(ct)).Where(subject => SubjectTaughtTo(subject, group)).ToList();
+        var students = (await _students.GetByGroupAsync(group, ct))
+            .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
+            .ToList();
+        if (taught.Count == 0 && students.Count == 0)
+            throw new AppException(404, "Групу не знайдено");
+
+        var settings = await _settings.GetAsync(ct);
+        var sheets = await _sheets.GetByGroupAsync(group, ct);
+        var names = await ProfessorNameMapAsync(taught.SelectMany(subject => subject.ProfessorIds), ct);
+        var debtors = new List<GroupPassportDebtResponse>();
+        var debtorsIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var subject in taught)
+        {
+            var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
+            foreach (var student in students)
+            {
+                var own = grades.Where(grade => grade.StudentId == student.Id).ToList();
+                var standing = GradeBook.Evaluate(own, settings);
+                if (!standing.Debt)
+                    continue;
+                debtorsIds.Add(student.Id);
+                debtors.Add(new GroupPassportDebtResponse
+                {
+                    StudentId = student.Id,
+                    FullName = student.FullName,
+                    SubjectTitle = subject.Title,
+                    Total = standing.Total
+                });
+            }
+        }
+
+        return new GroupPassportResponse
+        {
+            Code = group,
+            Specialty = GroupSpecialties.Resolve(group, sheets.Select(sheet => sheet.Specialty)),
+            PassThreshold = settings.PassThreshold,
+            Students = students.Select(student => new GroupPassportStudentResponse
+            {
+                StudentId = student.Id,
+                FullName = student.FullName,
+                StudentCardNumber = student.StudentCardNumber,
+                InDebt = debtorsIds.Contains(student.Id)
+            }).ToList(),
+            Subjects = taught
+                .OrderBy(subject => subject.Title, StringComparer.CurrentCulture)
+                .Select(subject => new GroupPassportSubjectResponse
+                {
+                    SubjectId = subject.Id,
+                    Title = subject.Title,
+                    Credits = subject.Credits,
+                    ControlForm = subject.ControlForm is "Залік" or "Екзамен" ? subject.ControlForm : "Екзамен",
+                    ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList()
+                })
+                .ToList(),
+            Debtors = debtors
+                .OrderBy(item => item.FullName, StringComparer.CurrentCulture)
+                .ThenBy(item => item.SubjectTitle, StringComparer.CurrentCulture)
+                .ToList()
+        };
     }
 
     private async Task<Dictionary<string, string>> ProfessorNameMapAsync(IEnumerable<string> ids, CancellationToken ct)

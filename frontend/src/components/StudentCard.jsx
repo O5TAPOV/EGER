@@ -82,8 +82,13 @@ export default function StudentCardView({ card, activeSubjectId, onSubject }) {
                       )}
                     </td>
                     <td>
-                      {subject.hasMarks === false || !subject.hasFinal ? "—" : `${subject.finalPoints}/${subject.finalMax}`}
+                      {subject.hasMarks === false || subject.attemptPoints == null ? "—" : `${subject.attemptPoints}/${subject.finalMax}`}
                       {subject.finalType ? <span className="mt-1 block text-xs text-stone-500">{subject.finalType}</span> : null}
+                      {subject.hasRetake && (
+                        <span className="mt-1 block text-xs text-stone-300">
+                          Перескладання {subject.retakePoints} від {subject.retakeDate}
+                        </span>
+                      )}
                     </td>
                     <td className={`text-lg font-semibold ${subject.withinLimits === false && subject.hasMarks !== false ? "text-red-300" : "text-eger-gold"}`}>
                       {subject.hasMarks === false ? "—" : subject.total}

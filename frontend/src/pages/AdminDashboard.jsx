@@ -567,10 +567,15 @@ function StudentGroupFilter({ students, subjects, value, onChange }) {
         />
       </Field>
       {value && (
-        <p className="text-sm text-stone-300">
-          Дисципліни групи {value}:{" "}
-          {taught.length === 0 ? "ще не призначено" : taught.map((subject) => subject.title).join(", ")}
-        </p>
+        <div className="space-y-1 text-sm text-stone-300">
+          <p>
+            Дисципліни групи {value}:{" "}
+            {taught.length === 0 ? "ще не призначено" : taught.map((subject) => subject.title).join(", ")}
+          </p>
+          <Link className="inline-block text-eger-gold hover:underline" to={`/admin/group?code=${encodeURIComponent(value)}`}>
+            Паспорт групи
+          </Link>
+        </div>
       )}
     </div>
   );

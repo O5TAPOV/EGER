@@ -29,7 +29,7 @@ function columnMessage(fullName, points, maxPoints) {
   return `Увага. Бал студента ${fullName} становить ${points} і перевищує максимум колонки ${maxPoints}.`;
 }
 
-function limitMessages({ fullName, row, lectures, works, controls, sessionId, finalColumn, mark, currentMax, finalMax }) {
+function limitMessages({ fullName, row, lectures, works, controls, sessionId, finalColumn, retakeColumn, mark, currentMax, finalMax }) {
   const messages = [];
   let current = 0;
   const groups = [
@@ -50,19 +50,24 @@ function limitMessages({ fullName, row, lectures, works, controls, sessionId, fi
     });
   }
 
-  let finalPoints = null;
-  if (finalColumn) {
+  let checkedFinal = null;
+  if (finalColumn || retakeColumn) {
     const parsed = parsedMark(mark);
-    if (!parsed.invalid && !parsed.absent) finalPoints = parsed.points;
-  } else if (row.hasFinal) {
-    finalPoints = row.finalPoints;
+    if (!parsed.invalid && !parsed.absent && !parsed.empty) checkedFinal = parsed.points;
   }
-  const total = current + (finalPoints ?? 0);
+  const usedFinal = retakeColumn
+    ? checkedFinal
+    : row.hasRetake
+      ? row.retakePoints
+      : finalColumn
+        ? checkedFinal
+        : row.finalPoints;
+  const total = current + (usedFinal ?? 0);
   if (current > currentMax) {
     messages.push(`Увага. Поточні бали студента ${fullName} становлять ${current} і перевищують максимум ${currentMax}. Перевірте поточні роботи.`);
   }
-  if (finalPoints != null && finalPoints > finalMax) {
-    messages.push(`Увага. Підсумок студента ${fullName} становить ${finalPoints} і перевищує максимум ${finalMax}. Перевірте підсумковий контроль.`);
+  if (checkedFinal != null && checkedFinal > finalMax) {
+    messages.push(`Увага. Підсумок студента ${fullName} становить ${checkedFinal} і перевищує максимум ${finalMax}. Перевірте підсумковий контроль.`);
   }
   if (total > 100) {
     messages.push(`Увага. Сума балів студента ${fullName} становить ${total} і перевищує 100. Перевірте поточні роботи та підсумковий контроль.`);
@@ -145,6 +150,56 @@ function SheetCell({ display, allowsAbsence, readOnly, onCommit }) {
         }
       }}
     />
+  );
+}
+
+function RetakeCell({ row, editable, onDelete, onAdd }) {
+  const [date, setDate] = useState("");
+  const [score, setScore] = useState("");
+
+  if (row.hasRetake) {
+    return (
+      <div className="retake-cell">
+        <span>{row.retakeDate}</span>
+        <span>{row.retakePoints}</span>
+        {editable && (
+          <button type="button" className="sheet-row-delete" onClick={onDelete}>
+            Видалити
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (!editable || !row.hasFinal) return "—";
+
+  return (
+    <form
+      className="retake-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onAdd(date.trim(), score.trim());
+        setDate("");
+        setScore("");
+      }}
+    >
+      <input
+        className="field"
+        value={date}
+        placeholder="дд.мм.рррр"
+        aria-label="Дата перескладання"
+        onChange={(event) => setDate(event.target.value)}
+      />
+      <input
+        className="field"
+        value={score}
+        inputMode="numeric"
+        placeholder="бал"
+        aria-label="Бал перескладання"
+        onChange={(event) => setScore(event.target.value)}
+      />
+      <button type="submit" className="btn-ghost">Додати</button>
+    </form>
   );
 }
 
@@ -262,7 +317,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subjectId, group, studentId]);
 
-  const saveCell = async (row, { sessionId, finalColumn, mark, allowsAbsence }) => {
+  const saveCell = async (row, { sessionId, finalColumn, retake, retakeDate, confirmReplace, mark, allowsAbsence }) => {
     if (!register) return;
     if (mark === undefined) {
       const text = allowsAbsence
@@ -280,6 +335,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
       controls: register.controls,
       sessionId,
       finalColumn,
+      retakeColumn: Boolean(retake),
       mark,
       currentMax: register.currentMax,
       finalMax: register.finalMax,
@@ -297,6 +353,9 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
         sessionId: sessionId || null,
         subjectId: register.subjectId,
         finalColumn: Boolean(finalColumn),
+        retake: Boolean(retake),
+        retakeDate: retakeDate || null,
+        confirmReplace: Boolean(confirmReplace),
         studentId: row.studentId,
         mark: mark === "" ? null : mark,
       });
@@ -484,7 +543,29 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
   const controls = register.controls || [];
   const storedWarnings = [...new Set(register.rows.flatMap((row) => row.warnings || []))];
   const editable = register.canEdit && !busy;
-  const columnCount = 2 + lectures.length + works.length + controls.length + 5;
+  const columnCount = 2 + lectures.length + works.length + controls.length + 6;
+
+  const removeRetake = async (row) => {
+    if (!window.confirm("Точно видалити перескладання?")) return;
+    await saveCell(row, { retake: true, mark: "", confirmReplace: true, allowsAbsence: false });
+  };
+
+  const addRetake = async (row, date, score) => {
+    if (!/^\d{2}\.\d{2}\.\d{4}$/.test(date)) {
+      const text = "Дата перескладання має бути у форматі дд.мм.рррр.";
+      setBlocked(text);
+      push(text, "error");
+      return;
+    }
+    if (row.hasRetake && !window.confirm("Точно видалити перескладання?")) return;
+    await saveCell(row, {
+      retake: true,
+      retakeDate: date,
+      mark: score,
+      confirmReplace: Boolean(row.hasRetake),
+      allowsAbsence: false,
+    });
+  };
 
   const pendingLegend = legendDraft.filter((item) => !item.previousCode).length;
 
@@ -543,7 +624,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                 {labs.length > 0 && <th className="group-col" colSpan={labs.length}>Лабораторні</th>}
                 {practicals.length > 0 && <th className="group-col" colSpan={practicals.length}>Практичні</th>}
                 {controls.length > 0 && <th className="group-col" colSpan={controls.length}>Контроль</th>}
-                <th className="group-col" colSpan={5}>Підсумок</th>
+                <th className="group-col" colSpan={6}>Підсумок</th>
               </tr>
               <tr>
                 {lectures.map((column) => (
@@ -560,6 +641,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                 ))}
                 <th className="sum-col">Результати поточного контролю</th>
                 <th className="sum-col">Залік / Екзамен</th>
+                <th className="sum-col">Перескладання</th>
                 <th className="sum-col">Кількість балів</th>
                 <th className="sum-col">ECTS</th>
                 <th className="sum-col">За розширеною шкалою</th>
@@ -571,6 +653,7 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                 {practicals.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
                 {controls.map((column) => <th key={column.id} className="lesson-col">{column.maxPoints}</th>)}
                 <th>{register.plannedCurrentMax}</th>
+                <th>{register.finalMax}</th>
                 <th>{register.finalMax}</th>
                 <th>100</th>
                 <th />
@@ -668,6 +751,14 @@ export default function Gradebook({ subjectId, group, studentId, linkBase, allow
                           onCommit={(mark) => saveCell(row, { finalColumn: true, mark, allowsAbsence: false })}
                         />
                       ) : ""}
+                    </td>
+                    <td className="retake-col">
+                      <RetakeCell
+                        row={row}
+                        editable={editable}
+                        onDelete={() => removeRetake(row)}
+                        onAdd={(date, score) => addRetake(row, date, score)}
+                      />
                     </td>
                     <td className={row.showScores && !row.withinLimits ? "is-over" : row.showScores && row.debt ? "is-debt" : ""}>
                       {row.showScores ? row.total : ""}

@@ -3,6 +3,7 @@ import Protected from "./components/Protected";
 import { AuthProvider, pathForRole, useAuth } from "./context/AuthContext";
 import { ToastProvider } from "./context/ToastContext";
 import AdminDashboard from "./pages/AdminDashboard";
+import GroupPassportPage from "./pages/GroupPassportPage";
 import AtRiskPage from "./pages/AtRiskPage";
 import LoginPage from "./pages/LoginPage";
 import ProfessorDashboard from "./pages/ProfessorDashboard";
@@ -51,6 +52,14 @@ export default function App() {
               }
             />
             <Route
+              path="/admin/group"
+              element={
+                <Protected role="Admin">
+                  <GroupPassportPage studentBase="/admin/students" />
+                </Protected>
+              }
+            />
+            <Route
               path="/admin/at-risk"
               element={
                 <Protected role="Admin">
@@ -71,6 +80,14 @@ export default function App() {
               element={
                 <Protected role="Professor">
                   <StudentCardPage />
+                </Protected>
+              }
+            />
+            <Route
+              path="/professor/group"
+              element={
+                <Protected role="Professor">
+                  <GroupPassportPage studentBase="/professor/students" />
                 </Protected>
               }
             />

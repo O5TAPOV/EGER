@@ -8,6 +8,12 @@ public sealed record EctsBand(int Min, int Max, string Letter, int? NationalScor
 public sealed class SubjectStanding
 {
     public int CurrentPoints { get; init; }
+    public int? AttemptPoints { get; init; }
+    public string? AttemptType { get; init; }
+    public bool HasAttempt { get; init; }
+    public int? RetakePoints { get; init; }
+    public DateTime? RetakeDate { get; init; }
+    public bool HasRetake { get; init; }
     public int? FinalPoints { get; init; }
     public string? FinalType { get; init; }
     public bool HasFinal { get; init; }
@@ -58,14 +64,21 @@ public static class GradeBook
     {
         var list = rows.ToList();
         var current = list.Where(row => GradeTypes.IsCurrent(row.GradeType)).Sum(row => row.GradeValue);
-        var final = list
+        var attempt = list
             .Where(row => GradeTypes.IsFinal(row.GradeType))
-            .OrderByDescending(row => row.Date)
+            .OrderBy(row => row.Date)
+            .ThenBy(row => row.Id, StringComparer.Ordinal)
             .FirstOrDefault();
-        var hasFinal = final is not null;
-        var total = current + (final?.GradeValue ?? 0);
+        var retake = list
+            .Where(row => GradeTypes.IsRetake(row.GradeType))
+            .OrderByDescending(row => row.Date)
+            .ThenBy(row => row.Id, StringComparer.Ordinal)
+            .FirstOrDefault();
+        var used = retake ?? attempt;
+        var hasFinal = used is not null;
+        var total = current + (used?.GradeValue ?? 0);
         var withinLimits = current <= settings.CurrentMax
-            && (final?.GradeValue ?? 0) <= settings.FinalMax
+            && (used?.GradeValue ?? 0) <= settings.FinalMax
             && total <= 100;
         var debt = hasFinal && total < settings.PassThreshold;
         var cannotReach = !hasFinal && list.Count > 0 && current + settings.FinalMax < settings.PassThreshold;
@@ -83,7 +96,7 @@ public static class GradeBook
         {
             outcome = "набрано на зараз";
         }
-        else if (final!.GradeType == GradeTypes.Credit)
+        else if ((attempt?.GradeType ?? used!.GradeType) == GradeTypes.Credit)
         {
             var band = BandFor(total);
             ects = band?.Letter;
@@ -102,8 +115,14 @@ public static class GradeBook
         return new SubjectStanding
         {
             CurrentPoints = current,
-            FinalPoints = final?.GradeValue,
-            FinalType = final?.GradeType,
+            AttemptPoints = attempt?.GradeValue,
+            AttemptType = attempt?.GradeType,
+            HasAttempt = attempt is not null,
+            RetakePoints = retake?.GradeValue,
+            RetakeDate = retake?.Date,
+            HasRetake = retake is not null,
+            FinalPoints = used?.GradeValue,
+            FinalType = attempt?.GradeType ?? used?.GradeType,
             HasFinal = hasFinal,
             Total = total,
             Debt = debt,
@@ -118,11 +137,15 @@ public static class GradeBook
 
     public static List<JournalLine> Lines(IEnumerable<Grade> rows)
     {
+        var source = rows.ToList();
+        var hasRetake = source.Any(row => GradeTypes.IsRetake(row.GradeType));
         var running = 0;
         var lines = new List<JournalLine>();
-        foreach (var row in rows.OrderBy(row => row.Date).ThenBy(row => row.Id, StringComparer.Ordinal))
+        foreach (var row in source.OrderBy(row => row.Date).ThenBy(row => row.Id, StringComparer.Ordinal))
         {
-            running += row.GradeValue;
+            var counts = !(hasRetake && GradeTypes.IsFinal(row.GradeType));
+            if (counts && !row.Absent)
+                running += row.GradeValue;
             lines.Add(new JournalLine
             {
                 Id = row.Id,
@@ -131,7 +154,7 @@ public static class GradeBook
                 Points = row.GradeValue,
                 RunningTotal = running,
                 ProfessorId = row.ProfessorId,
-                IsFinal = GradeTypes.IsFinal(row.GradeType)
+                IsFinal = GradeTypes.IsFinal(row.GradeType) || GradeTypes.IsRetake(row.GradeType)
             });
         }
 
