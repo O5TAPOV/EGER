@@ -4,7 +4,7 @@ export default function Modal({ title, onClose, children }) {
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/70 p-4" onMouseDown={onClose}>
       <div
-        className="card max-h-[90vh] w-full max-w-lg overflow-auto"
+        className="card modal-panel max-h-[90vh] w-full max-w-lg overflow-auto"
         role="dialog"
         aria-modal="true"
         aria-label={title}

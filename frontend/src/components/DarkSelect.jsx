@@ -1,23 +1,29 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useAnchoredBox } from "./anchoredMenu";
 
 export default function DarkSelect({ value, onChange, options, placeholder = "Оберіть", className = "", disabled = false }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
+  const menuRef = useRef(null);
   const listId = useId();
   const selected = options.find((option) => option.value === value);
+  const box = useAnchoredBox(open, rootRef);
 
   useEffect(() => {
     if (!open) return undefined;
     const onPointer = (event) => {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
+      const target = event.target;
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (event) => {
       if (event.key === "Escape") setOpen(false);
     };
-    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("mousedown", onPointer, true);
     document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("mousedown", onPointer, true);
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
@@ -36,8 +42,8 @@ export default function DarkSelect({ value, onChange, options, placeholder = "О
         <span className={selected ? "text-stone-100" : "text-stone-500"}>{selected?.label || placeholder}</span>
         <span className="text-xs text-stone-400" aria-hidden="true">▾</span>
       </button>
-      {open && (
-        <ul id={listId} role="listbox" className="dark-menu">
+      {open && box && createPortal(
+        <ul id={listId} ref={menuRef} role="listbox" className="dark-menu" style={box}>
           {options.length === 0 ? (
             <li className="px-3 py-2 text-sm text-stone-500">Немає варіантів</li>
           ) : (
@@ -58,7 +64,8 @@ export default function DarkSelect({ value, onChange, options, placeholder = "О
               </li>
             ))
           )}
-        </ul>
+        </ul>,
+        document.body,
       )}
     </div>
   );

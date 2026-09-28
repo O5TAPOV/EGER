@@ -5,6 +5,7 @@ import { api, errorText } from "../api/client";
 import DarkSelect from "../components/DarkSelect";
 import Layout from "../components/Layout";
 import Modal, { Field } from "../components/Modal";
+import SearchMultiSelect from "../components/SearchMultiSelect";
 import { useToast } from "../context/ToastContext";
 
 const emptyStudent = {
@@ -44,7 +45,6 @@ export default function AdminDashboard() {
   const [editor, setEditor] = useState(null);
   const [busy, setBusy] = useState(false);
   const [studentGroup, setStudentGroup] = useState("");
-  const [groupDraft, setGroupDraft] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -382,73 +382,36 @@ export default function AdminDashboard() {
                     value={editor.form.controlForm || "Екзамен"}
                     onChange={(value) => patch(setEditor, "controlForm", value)}
                     options={[
-                      { value: "Екзамен", label: "Екзамен" },
                       { value: "Залік", label: "Залік" },
+                      { value: "Екзамен", label: "Екзамен" },
                     ]}
                   />
                 </Field>
                 <fieldset>
                   <legend className="label">Групи</legend>
-                  <div className="mb-2 flex gap-2">
-                    <input
-                      className="field"
-                      value={groupDraft}
-                      placeholder="Код групи"
-                      onChange={(event) => setGroupDraft(event.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn-ghost"
-                      onClick={() => {
-                        const code = groupDraft.trim();
-                        if (!code || editor.form.groups.includes(code)) return;
-                        patch(setEditor, "groups", [...editor.form.groups, code]);
-                        setGroupDraft("");
-                      }}
-                    >
-                      Додати
-                    </button>
-                  </div>
-                  <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-eger-line p-3">
-                    {[...new Set([...(editor.form.groups || []), ...students.map((item) => item.group).filter(Boolean)])]
-                      .sort((a, b) => a.localeCompare(b, "uk"))
-                      .map((code) => (
-                        <label key={code} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={editor.form.groups.includes(code)}
-                            onChange={(event) => {
-                              const next = new Set(editor.form.groups);
-                              if (event.target.checked) next.add(code);
-                              else next.delete(code);
-                              patch(setEditor, "groups", [...next]);
-                            }}
-                          />
-                          {code}
-                        </label>
-                      ))}
-                  </div>
+                  <SearchMultiSelect
+                    options={groupChoices(students, subjects, editor.form.groups)}
+                    selected={editor.form.groups || []}
+                    onChange={(groups) => patch(setEditor, "groups", groups)}
+                    placeholder="Пошук групи"
+                    inputLabel="Пошук групи"
+                    emptyText="Груп ще немає. Введіть код нової групи."
+                    allowCreate
+                    createLabel={(code) => `Додати групу «${code}»`}
+                  />
                 </fieldset>
                 <fieldset>
                   <legend className="label">Викладачі</legend>
-                  <div className="max-h-40 space-y-2 overflow-auto rounded-lg border border-eger-line p-3">
-                    {professors.length === 0 && <p className="text-sm text-stone-400">Спочатку додайте викладача</p>}
-                    {professors.map((professor) => (
-                      <label key={professor.id} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={editor.form.professorIds.includes(professor.id)}
-                          onChange={(event) => {
-                            const next = new Set(editor.form.professorIds);
-                            if (event.target.checked) next.add(professor.id);
-                            else next.delete(professor.id);
-                            patch(setEditor, "professorIds", [...next]);
-                          }}
-                        />
-                        {professor.fullName}
-                      </label>
-                    ))}
-                  </div>
+                  <SearchMultiSelect
+                    options={[...professors]
+                      .sort((a, b) => a.fullName.localeCompare(b.fullName, "uk"))
+                      .map((professor) => ({ value: professor.id, label: professor.fullName }))}
+                    selected={editor.form.professorIds || []}
+                    onChange={(professorIds) => patch(setEditor, "professorIds", professorIds)}
+                    placeholder="Пошук викладача"
+                    inputLabel="Пошук викладача"
+                    emptyText={professors.length === 0 ? "Спочатку додайте викладача" : "Нічого не знайдено"}
+                  />
                 </fieldset>
               </>
             )}
@@ -583,6 +546,17 @@ function StudentGroupFilter({ students, subjects, value, onChange }) {
 
 function patch(setEditor, key, value) {
   setEditor((current) => ({ ...current, form: { ...current.form, [key]: value } }));
+}
+
+function groupChoices(students, subjects, selected) {
+  const codes = [
+    ...(selected || []),
+    ...students.map((item) => item.group),
+    ...subjects.flatMap((item) => item.groups || []),
+  ];
+  return [...new Set(codes.map((code) => (code || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "uk"))
+    .map((code) => ({ value: code, label: code }));
 }
 
 function Stat({ label, value, hint, icon }) {
