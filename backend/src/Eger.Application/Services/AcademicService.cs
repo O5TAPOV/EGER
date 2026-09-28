@@ -1,0 +1,468 @@
+using Eger.Application.Abstractions;
+using Eger.Application.Common;
+using Eger.Application.Dtos;
+using Eger.Application.Exceptions;
+using Eger.Domain;
+using Eger.Domain.Entities;
+
+namespace Eger.Application.Services;
+
+public class AcademicService
+{
+    private readonly IStudentRepository _students;
+    private readonly IProfessorRepository _professors;
+    private readonly ISubjectRepository _subjects;
+    private readonly IGradeRepository _grades;
+    private readonly IClassSessionRepository _sessions;
+    private readonly IJournalSheetRepository _sheets;
+    private readonly IGradingSettingsRepository _settings;
+
+    public AcademicService(
+        IStudentRepository students,
+        IProfessorRepository professors,
+        ISubjectRepository subjects,
+        IGradeRepository grades,
+        IClassSessionRepository sessions,
+        IJournalSheetRepository sheets,
+        IGradingSettingsRepository settings)
+    {
+        _students = students;
+        _professors = professors;
+        _subjects = subjects;
+        _grades = grades;
+        _sessions = sessions;
+        _sheets = sheets;
+        _settings = settings;
+    }
+
+    public async Task<StudentCardResponse> CardForUserAsync(string userId, CancellationToken ct = default)
+    {
+        var student = await _students.GetByUserIdAsync(userId, ct)
+            ?? throw new AppException(404, "Профіль студента не знайдено");
+        return await BuildCardAsync(student, ct);
+    }
+
+    public async Task<StudentCardResponse> CardAsync(Actor actor, string studentId, CancellationToken ct = default)
+    {
+        Ids.Ensure(studentId);
+        var student = await _students.GetByIdAsync(studentId, ct)
+            ?? throw new AppException(404, "Студента не знайдено");
+        await EnsureCanSeeStudentAsync(actor, student, ct);
+        return await BuildCardAsync(student, ct);
+    }
+
+    public async Task<JournalResponse> JournalAsync(Actor actor, string studentId, string subjectId, CancellationToken ct = default)
+    {
+        Ids.Ensure(studentId);
+        Ids.Ensure(subjectId);
+        var student = await _students.GetByIdAsync(studentId, ct)
+            ?? throw new AppException(404, "Студента не знайдено");
+        await EnsureCanSeeStudentAsync(actor, student, ct);
+        var subject = await _subjects.GetByIdAsync(subjectId, ct)
+            ?? throw new AppException(404, "Дисципліну не знайдено");
+        var settings = await _settings.GetAsync(ct);
+        var grades = (await _grades.GetByStudentAsync(student.Id, ct))
+            .Where(grade => grade.SubjectId == subject.Id)
+            .ToList();
+        var standing = GradeBook.Evaluate(grades, settings);
+        var names = await ProfessorNameMapAsync(grades.Select(grade => grade.ProfessorId).Concat(subject.ProfessorIds), ct);
+
+        return new JournalResponse
+        {
+            SubjectId = subject.Id,
+            SubjectTitle = subject.Title,
+            Credits = subject.Credits,
+            ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList(),
+            StudentId = student.Id,
+            StudentName = student.FullName,
+            Group = student.Group,
+            CurrentPoints = standing.CurrentPoints,
+            CurrentMax = settings.CurrentMax,
+            FinalPoints = standing.FinalPoints,
+            FinalMax = settings.FinalMax,
+            Total = standing.Total,
+            HasFinal = standing.HasFinal,
+            Debt = standing.Debt,
+            Ects = standing.Ects,
+            NationalLabel = standing.NationalLabel,
+            Outcome = standing.Outcome,
+            Rows = GradeBook.Lines(grades).Select(line => new JournalRowResponse
+            {
+                Id = line.Id,
+                Date = line.Date,
+                GradeType = line.GradeType,
+                Points = line.Points,
+                RunningTotal = line.RunningTotal,
+                ProfessorName = names.GetValueOrDefault(line.ProfessorId, "—"),
+                IsFinal = line.IsFinal
+            }).ToList()
+        };
+    }
+
+    public async Task<StatementResponse> StatementAsync(Actor actor, string subjectId, string group, CancellationToken ct = default)
+    {
+        Ids.Ensure(subjectId);
+        if (string.IsNullOrWhiteSpace(group))
+            throw new AppException(400, "Оберіть групу");
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+
+        var subject = await _subjects.GetByIdAsync(subjectId, ct)
+            ?? throw new AppException(404, "Дисципліну не знайдено");
+        await EnsureTeachesAsync(actor, subject, ct);
+
+        var settings = await _settings.GetAsync(ct);
+        var students = (await _students.GetByGroupAsync(group.Trim(), ct))
+            .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
+            .ToList();
+        var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
+        var names = await ProfessorNameMapAsync(subject.ProfessorIds.Concat(grades.Select(grade => grade.ProfessorId)), ct);
+        var rows = new List<StatementStudentResponse>();
+        var scored = new List<int>();
+        var debtors = new List<AtRiskStudentResponse>();
+
+        foreach (var student in students)
+        {
+            var own = grades.Where(grade => grade.StudentId == student.Id).ToList();
+            var standing = GradeBook.Evaluate(own, settings);
+            rows.Add(new StatementStudentResponse
+            {
+                StudentId = student.Id,
+                FullName = student.FullName,
+                StudentCardNumber = student.StudentCardNumber,
+                CurrentPoints = standing.CurrentPoints,
+                FinalPoints = standing.FinalPoints,
+                FinalType = standing.FinalType,
+                Total = standing.Total,
+                HasFinal = standing.HasFinal,
+                Debt = standing.Debt,
+                CannotReach = standing.CannotReach,
+                Ects = standing.Ects,
+                NationalLabel = standing.NationalLabel,
+                Outcome = standing.Outcome,
+                Journal = MapLines(own, names)
+            });
+
+            if (own.Count > 0)
+                scored.Add(standing.Total);
+
+            if (own.Count > 0 && (standing.Debt || standing.CannotReach))
+            {
+                debtors.Add(RiskRow(student, subject, standing));
+            }
+        }
+
+        return new StatementResponse
+        {
+            SubjectId = subject.Id,
+            SubjectTitle = subject.Title,
+            Credits = subject.Credits,
+            Group = group.Trim(),
+            ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList(),
+            ClassAverage = GradeBook.Average(scored),
+            PassThreshold = settings.PassThreshold,
+            CurrentMax = settings.CurrentMax,
+            FinalMax = settings.FinalMax,
+            Students = rows,
+            Debtors = debtors
+        };
+    }
+
+    public async Task<AtRiskResponse> AtRiskAsync(Actor actor, CancellationToken ct = default)
+    {
+        if (actor.Role == Roles.Student)
+            throw new AppException(403, "Недостатньо прав");
+
+        var settings = await _settings.GetAsync(ct);
+        var subjects = await VisibleSubjectsAsync(actor, ct);
+        var students = await _students.GetAllAsync(ct);
+        var studentMap = students.ToDictionary(student => student.Id);
+        var people = new List<AtRiskStudentResponse>();
+        var weakSubjects = new List<AtRiskSubjectResponse>();
+
+        foreach (var subject in subjects)
+        {
+            var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
+            var standings = grades
+                .GroupBy(grade => grade.StudentId)
+                .Select(group => (StudentId: group.Key, Rows: group.ToList(), Standing: GradeBook.Evaluate(group.ToList(), settings)))
+                .Where(item => item.Rows.Count > 0)
+                .ToList();
+
+            foreach (var item in standings.Where(item => item.Standing.Debt || item.Standing.CannotReach))
+            {
+                if (!studentMap.TryGetValue(item.StudentId, out var student))
+                    continue;
+                people.Add(RiskRow(student, subject, item.Standing));
+            }
+
+            var withFinal = standings.Where(item => item.Standing.HasFinal).ToList();
+            if (withFinal.Count == 0)
+                continue;
+            var passed = withFinal.Count(item => item.Standing.WithinLimits && !item.Standing.Debt);
+            var share = Math.Round(passed * 100.0 / withFinal.Count, 1, MidpointRounding.AwayFromZero);
+            if (share < 50)
+            {
+                weakSubjects.Add(new AtRiskSubjectResponse
+                {
+                    SubjectId = subject.Id,
+                    SubjectTitle = subject.Title,
+                    WithFinal = withFinal.Count,
+                    Passed = passed,
+                    PassShare = share,
+                    AtRiskCount = standings.Count(item => item.Standing.Debt || item.Standing.CannotReach)
+                });
+            }
+        }
+
+        return new AtRiskResponse
+        {
+            PassThreshold = settings.PassThreshold,
+            Students = people
+                .OrderBy(item => item.Group, StringComparer.CurrentCulture)
+                .ThenBy(item => item.FullName, StringComparer.CurrentCulture)
+                .ToList(),
+            Subjects = weakSubjects.OrderBy(item => item.PassShare).ThenBy(item => item.SubjectTitle).ToList()
+        };
+    }
+
+    private async Task<StudentCardResponse> BuildCardAsync(Student student, CancellationToken ct)
+    {
+        var settings = await _settings.GetAsync(ct);
+        var grades = await _grades.GetByStudentAsync(student.Id, ct);
+        var subjects = await _subjects.GetAllAsync(ct);
+        var taughtIds = subjects
+            .Where(subject => SubjectTaughtTo(subject, student.Group))
+            .Select(subject => subject.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        if (taughtIds.Count == 0)
+        {
+            foreach (var subjectId in await _sessions.GetSubjectIdsByGroupAsync(student.Group, ct))
+                taughtIds.Add(subjectId);
+        }
+        var subjectMap = subjects.ToDictionary(subject => subject.Id);
+        var scores = new List<SubjectScoreResponse>();
+
+        foreach (var subjectId in taughtIds.OrderBy(id => subjectMap.GetValueOrDefault(id)?.Title ?? "", StringComparer.CurrentCulture))
+        {
+            if (!subjectMap.TryGetValue(subjectId, out var subject))
+                continue;
+            var own = grades.Where(grade => grade.SubjectId == subject.Id).ToList();
+            var standing = GradeBook.Evaluate(own, settings);
+            var hasMarks = own.Any(grade => !grade.Absent);
+            var names = await ProfessorNameMapAsync(subject.ProfessorIds, ct);
+            scores.Add(new SubjectScoreResponse
+            {
+                SubjectId = subject.Id,
+                SubjectTitle = subject.Title,
+                Credits = subject.Credits,
+                ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList(),
+                CurrentPoints = standing.CurrentPoints,
+                CurrentMax = settings.CurrentMax,
+                AttemptPoints = standing.HasAttempt ? standing.AttemptPoints : null,
+                RetakePoints = standing.HasRetake ? standing.RetakePoints : null,
+                RetakeDate = standing.RetakeDate is DateTime retakeDate ? retakeDate.ToString("dd.MM.yyyy") : "",
+                HasRetake = standing.HasRetake,
+                FinalPoints = standing.HasFinal ? standing.FinalPoints : null,
+                FinalMax = settings.FinalMax,
+                FinalType = standing.FinalType,
+                Total = standing.Total,
+                HasFinal = standing.HasFinal,
+                Debt = hasMarks && standing.Debt,
+                CannotReach = hasMarks && standing.CannotReach,
+                Ects = hasMarks ? standing.Ects : null,
+                NationalScore = hasMarks ? standing.NationalScore : null,
+                NationalLabel = hasMarks ? standing.NationalLabel : null,
+                Outcome = hasMarks ? standing.Outcome : "",
+                WithinLimits = standing.WithinLimits,
+                HasMarks = hasMarks,
+                AbsenceCount = own.Count(grade => grade.Absent),
+                Warnings = hasMarks ? PointGuard.Describe(student.FullName, standing, settings) : []
+            });
+        }
+
+        var validTotals = scores.Where(score => score.HasMarks && score.WithinLimits).Select(score => score.Total).ToList();
+        return new StudentCardResponse
+        {
+            StudentId = student.Id,
+            FullName = student.FullName,
+            Group = student.Group,
+            StudentCardNumber = student.StudentCardNumber,
+            EnrollmentYear = student.EnrollmentYear,
+            AverageTotal = GradeBook.Average(validTotals),
+            HasInvalidSubjects = scores.Any(score => !score.WithinLimits),
+            PassThreshold = settings.PassThreshold,
+            CurrentMax = settings.CurrentMax,
+            FinalMax = settings.FinalMax,
+            Subjects = scores
+        };
+    }
+
+    private async Task EnsureCanSeeStudentAsync(Actor actor, Student student, CancellationToken ct)
+    {
+        if (actor.Role is Roles.Admin or Roles.Professor)
+            return;
+        if (actor.Role == Roles.Student)
+        {
+            var own = await _students.GetByUserIdAsync(actor.UserId, ct);
+            if (own?.Id == student.Id)
+                return;
+        }
+
+        throw new AppException(403, "Недостатньо прав");
+    }
+
+    private static bool SubjectTaughtTo(Subject subject, string group) =>
+        subject.Groups?.Any(item => string.Equals(item, group, StringComparison.OrdinalIgnoreCase)) == true;
+
+    private async Task EnsureTeachesAsync(Actor actor, Subject subject, CancellationToken ct)
+    {
+        if (actor.Role == Roles.Admin)
+            return;
+        if (actor.Role != Roles.Professor)
+            throw new AppException(403, "Недостатньо прав");
+        var professor = await _professors.GetByUserIdAsync(actor.UserId, ct)
+            ?? throw new AppException(403, "Профіль викладача не знайдено");
+        if (!subject.ProfessorIds.Contains(professor.Id))
+            throw new AppException(403, "Ви не викладаєте цю дисципліну");
+    }
+
+    private async Task<IReadOnlyList<Subject>> VisibleSubjectsAsync(Actor actor, CancellationToken ct)
+    {
+        if (actor.Role == Roles.Admin)
+            return await _subjects.GetAllAsync(ct);
+        var professor = await _professors.GetByUserIdAsync(actor.UserId, ct)
+            ?? throw new AppException(403, "Профіль викладача не знайдено");
+        return await _subjects.GetByProfessorAsync(professor.Id, ct);
+    }
+
+    public async Task<IReadOnlyList<GroupOptionResponse>> TeachingGroupsAsync(Actor actor, CancellationToken ct = default)
+    {
+        if (actor.Role is not (Roles.Admin or Roles.Professor))
+            throw new AppException(403, "Недостатньо прав");
+        var subjects = await VisibleSubjectsAsync(actor, ct);
+        var codes = subjects
+            .SelectMany(subject => subject.Groups ?? [])
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(code => code, StringComparer.CurrentCulture)
+            .ToList();
+        var options = new List<GroupOptionResponse>();
+        foreach (var code in codes)
+        {
+            var sheets = await _sheets.GetByGroupAsync(code, ct);
+            options.Add(new GroupOptionResponse
+            {
+                Code = code,
+                Specialty = GroupSpecialties.Resolve(code, sheets.Select(sheet => sheet.Specialty))
+            });
+        }
+
+        return options;
+    }
+
+    public async Task<GroupPassportResponse> GroupPassportAsync(Actor actor, string? code, CancellationToken ct = default)
+    {
+        if (actor.Role is not (Roles.Admin or Roles.Professor))
+            throw new AppException(403, "Недостатньо прав");
+        var group = code?.Trim() ?? "";
+        if (group.Length == 0)
+            throw new AppException(400, "Вкажіть групу");
+
+        var visible = await VisibleSubjectsAsync(actor, ct);
+        if (actor.Role == Roles.Professor && !visible.Any(subject => SubjectTaughtTo(subject, group)))
+            throw new AppException(403, "Ви не викладаєте в цій групі");
+        var taught = (await _subjects.GetAllAsync(ct)).Where(subject => SubjectTaughtTo(subject, group)).ToList();
+        var students = (await _students.GetByGroupAsync(group, ct))
+            .OrderBy(student => student.FullName, StringComparer.CurrentCulture)
+            .ToList();
+        if (taught.Count == 0 && students.Count == 0)
+            throw new AppException(404, "Групу не знайдено");
+
+        var settings = await _settings.GetAsync(ct);
+        var sheets = await _sheets.GetByGroupAsync(group, ct);
+        var names = await ProfessorNameMapAsync(taught.SelectMany(subject => subject.ProfessorIds), ct);
+        var debtors = new List<GroupPassportDebtResponse>();
+        var debtorsIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var subject in taught)
+        {
+            var grades = await _grades.GetBySubjectAsync(subject.Id, ct);
+            foreach (var student in students)
+            {
+                var own = grades.Where(grade => grade.StudentId == student.Id).ToList();
+                var standing = GradeBook.Evaluate(own, settings);
+                if (!standing.Debt)
+                    continue;
+                debtorsIds.Add(student.Id);
+                debtors.Add(new GroupPassportDebtResponse
+                {
+                    StudentId = student.Id,
+                    FullName = student.FullName,
+                    SubjectTitle = subject.Title,
+                    Total = standing.Total
+                });
+            }
+        }
+
+        return new GroupPassportResponse
+        {
+            Code = group,
+            Specialty = GroupSpecialties.Resolve(group, sheets.Select(sheet => sheet.Specialty)),
+            PassThreshold = settings.PassThreshold,
+            Students = students.Select(student => new GroupPassportStudentResponse
+            {
+                StudentId = student.Id,
+                FullName = student.FullName,
+                StudentCardNumber = student.StudentCardNumber,
+                InDebt = debtorsIds.Contains(student.Id)
+            }).ToList(),
+            Subjects = taught
+                .OrderBy(subject => subject.Title, StringComparer.CurrentCulture)
+                .Select(subject => new GroupPassportSubjectResponse
+                {
+                    SubjectId = subject.Id,
+                    Title = subject.Title,
+                    Credits = subject.Credits,
+                    ControlForm = subject.ControlForm is "Залік" or "Екзамен" ? subject.ControlForm : "Екзамен",
+                    ProfessorNames = subject.ProfessorIds.Select(id => names.GetValueOrDefault(id, "—")).ToList()
+                })
+                .ToList(),
+            Debtors = debtors
+                .OrderBy(item => item.FullName, StringComparer.CurrentCulture)
+                .ThenBy(item => item.SubjectTitle, StringComparer.CurrentCulture)
+                .ToList()
+        };
+    }
+
+    private async Task<Dictionary<string, string>> ProfessorNameMapAsync(IEnumerable<string> ids, CancellationToken ct)
+    {
+        var professors = await _professors.GetByIdsAsync(ids, ct);
+        return professors.ToDictionary(professor => professor.Id, professor => professor.FullName);
+    }
+
+    private static List<JournalRowResponse> MapLines(IReadOnlyList<Grade> grades, IReadOnlyDictionary<string, string> names) =>
+        GradeBook.Lines(grades).Select(line => new JournalRowResponse
+        {
+            Id = line.Id,
+            Date = line.Date,
+            GradeType = line.GradeType,
+            Points = line.Points,
+            RunningTotal = line.RunningTotal,
+            ProfessorName = names.GetValueOrDefault(line.ProfessorId, "—"),
+            IsFinal = line.IsFinal
+        }).ToList();
+
+    private static AtRiskStudentResponse RiskRow(Student student, Subject subject, SubjectStanding standing) => new()
+    {
+        StudentId = student.Id,
+        FullName = student.FullName,
+        Group = student.Group,
+        SubjectId = subject.Id,
+        SubjectTitle = subject.Title,
+        Total = standing.Total,
+        HasFinal = standing.HasFinal,
+        Debt = standing.Debt,
+        CannotReach = standing.CannotReach,
+        Reason = standing.Debt ? "борг" : "вже не набере прохідний бал"
+    };
+}

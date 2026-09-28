@@ -1,0 +1,48 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D2D4258D-2147-4BC4-8773-9B0926101A21}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eger.Domain", "src\Eger.Domain\Eger.Domain.csproj", "{F0F292B5-0542-49F4-B566-7C37FCAA7FDB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eger.Application", "src\Eger.Application\Eger.Application.csproj", "{9E4CA1F1-1BB6-4F27-A666-8200342733F4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eger.Infrastructure", "src\Eger.Infrastructure\Eger.Infrastructure.csproj", "{BE5C5861-B58D-4536-B165-711B0B3E33EF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eger.Api", "src\Eger.Api\Eger.Api.csproj", "{2FB3BDD9-2418-4719-A1F7-225804B505FC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F0F292B5-0542-49F4-B566-7C37FCAA7FDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F0F292B5-0542-49F4-B566-7C37FCAA7FDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F0F292B5-0542-49F4-B566-7C37FCAA7FDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F0F292B5-0542-49F4-B566-7C37FCAA7FDB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9E4CA1F1-1BB6-4F27-A666-8200342733F4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9E4CA1F1-1BB6-4F27-A666-8200342733F4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9E4CA1F1-1BB6-4F27-A666-8200342733F4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9E4CA1F1-1BB6-4F27-A666-8200342733F4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE5C5861-B58D-4536-B165-711B0B3E33EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE5C5861-B58D-4536-B165-711B0B3E33EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE5C5861-B58D-4536-B165-711B0B3E33EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE5C5861-B58D-4536-B165-711B0B3E33EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2FB3BDD9-2418-4719-A1F7-225804B505FC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2FB3BDD9-2418-4719-A1F7-225804B505FC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2FB3BDD9-2418-4719-A1F7-225804B505FC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2FB3BDD9-2418-4719-A1F7-225804B505FC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{F0F292B5-0542-49F4-B566-7C37FCAA7FDB} = {D2D4258D-2147-4BC4-8773-9B0926101A21}
+		{9E4CA1F1-1BB6-4F27-A666-8200342733F4} = {D2D4258D-2147-4BC4-8773-9B0926101A21}
+		{BE5C5861-B58D-4536-B165-711B0B3E33EF} = {D2D4258D-2147-4BC4-8773-9B0926101A21}
+		{2FB3BDD9-2418-4719-A1F7-225804B505FC} = {D2D4258D-2147-4BC4-8773-9B0926101A21}
+	EndGlobalSection
+EndGlobal

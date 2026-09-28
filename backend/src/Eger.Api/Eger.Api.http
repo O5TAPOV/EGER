@@ -1,0 +1,14 @@
+@host = http://localhost:5080
+
+### Вхід адміністратора
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@eger.ua",
+  "password": "Admin123!"
+}
+
+###
+
+GET {{host}}/health
