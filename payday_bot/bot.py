@@ -22,6 +22,7 @@ from payday_bot.render import (
     render_balances,
     render_done,
     render_friday,
+    render_rates,
     render_hold,
     render_lexus,
     render_plan,
@@ -84,8 +85,8 @@ def refresh_rate(state) -> str:
         return "⚠️ Курс X-Change зараз не відкрився. Рахую по останньому збереженому."
     buy, sell = parsed
     state.xchange_buy = buy
-    state.usd_uah = sell
-    return f"💱 X-Change: купівля {fmt(buy)}, продаж {fmt(sell)}."
+    state.xchange_sell = sell
+    return ""
 
 
 def button_name(text: str) -> str:
@@ -288,7 +289,7 @@ async def rate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _allowed(update, state):
         return
     if not context.args:
-        await _reply(update, f"Зараз рахую долар по {fmt(state.usd_uah)} грн. Змінити: /rate 45.10")
+        await _reply(update, render_rates(state) + "\nПоки сайт мовчить, можна вписати обидва курси однаково: /rate 45.10")
         return
     try:
         rate = parse_amount(context.args[0])
@@ -299,8 +300,10 @@ async def rate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _reply(update, "Курс має бути більший за нуль.")
         return
     state.usd_uah = rate
+    state.xchange_buy = rate
+    state.xchange_sell = rate
     save_state(path, state)
-    await _reply(update, f"Курс записав: {fmt(rate)} грн за долар.\n\n" + render_plan(state, _today()))
+    await _reply(update, f"Поки що обидва курси {fmt(rate)}. Наступне відкриття плану знову візьме X-Change.\n\n" + render_plan(state, _today()))
 
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -334,8 +337,19 @@ async def job_plan(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def job_hold(context: ContextTypes.DEFAULT_TYPE) -> None:
+    path = state_path()
     state = ensure_state()
+    refresh_rate(state)
+    save_state(path, state)
     await _send_owner(context, render_hold(state, _today()))
+
+
+async def job_rate(context: ContextTypes.DEFAULT_TYPE) -> None:
+    path = state_path()
+    state = ensure_state()
+    note = refresh_rate(state)
+    save_state(path, state)
+    log.info(note or f"X-Change {state.xchange_buy}/{state.xchange_sell}")
 
 
 def build_app(token: str) -> Application:
@@ -357,6 +371,8 @@ def build_app(token: str) -> Application:
 
         app.job_queue.run_daily(job_plan, time=time(19, 0, tzinfo=KYIV), days=(4,))
         app.job_queue.run_daily(job_hold, time=time(12, 0, tzinfo=KYIV), days=(0,))
+        app.job_queue.run_daily(job_rate, time=time(10, 0, tzinfo=KYIV))
+        app.job_queue.run_once(job_rate, when=15)
     return app
 
 
@@ -379,6 +395,6 @@ def preview(weeks: int = 6) -> str:
         if debt.settle == "asap" and debt.due is not None and debt.due < start:
             debt.balance = money(0)
     for plan, _ in project_weeks(working, start, weeks):
-        chunks.append(render_friday(plan, state.usd_uah))
+        chunks.append(render_friday(plan, state))
         chunks.append("")
     return "\n".join(chunks).strip()

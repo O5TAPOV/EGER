@@ -71,6 +71,7 @@ class State:
     lexus_saved_usd: Decimal = field(default_factory=lambda: money(0))
     parents_held_uah: Decimal = field(default_factory=lambda: money(0))
     xchange_buy: Decimal = field(default_factory=lambda: money(0))
+    xchange_sell: Decimal = field(default_factory=lambda: money(0))
     undo: list = field(default_factory=list)
     debts: list[Debt] = field(default_factory=list)
     installment_paid: dict[str, str] = field(default_factory=dict)
@@ -103,6 +104,7 @@ class State:
             "lexus_saved_usd": f"{self.lexus_saved_usd:.2f}",
             "parents_held_uah": f"{self.parents_held_uah:.2f}",
             "xchange_buy": f"{self.xchange_buy:.2f}",
+            "xchange_sell": f"{self.xchange_sell:.2f}",
             "undo": self.undo,
             "debts": [item.to_json() for item in self.debts],
             "installment_paid": self.installment_paid,
@@ -128,6 +130,7 @@ class State:
             lexus_saved_usd=money(raw.get("lexus_saved_usd", 0)),
             parents_held_uah=money(raw.get("parents_held_uah", 0)),
             xchange_buy=money(raw.get("xchange_buy", 0)),
+            xchange_sell=money(raw.get("xchange_sell", 0)),
             undo=list(raw.get("undo") or []),
             debts=[Debt.from_json(item) for item in raw["debts"]],
             installment_paid=dict(raw.get("installment_paid", {})),
@@ -147,3 +150,11 @@ def save_state(path: Path, state: State) -> None:
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(state.to_json(), ensure_ascii=False, indent=2), encoding="utf-8")
     temporary.replace(path)
+
+
+def buy_rate(state: "State"):
+    return state.xchange_buy if state.xchange_buy > 0 else state.usd_uah
+
+
+def sell_rate(state: "State"):
+    return state.xchange_sell if state.xchange_sell > 0 else state.usd_uah

@@ -111,7 +111,7 @@ def test_xchange_parser_reads_vinnytsia_usd():
     assert parse_usd_page(html) == (money("44.6"), money("45.1"))
 
 
-def test_pile_uses_sell_rate_for_both_piles():
+def test_pile_uses_one_rate_when_xchange_is_missing():
     from payday_bot.render import pile_totals
 
     state = initial_state()
@@ -123,6 +123,24 @@ def test_pile_uses_sell_rate_for_both_piles():
     assert totals["parents_usd"] == money("100")
     assert totals["total_usd"] == money("200")
     assert totals["total_uah"] == money("9020")
+
+
+def test_pile_splits_xchange_buy_and_sell():
+    from payday_bot.plan import income_uah
+    from payday_bot.render import pile_totals
+
+    state = initial_state()
+    state.xchange_buy = money("44.60")
+    state.xchange_sell = money("45.10")
+    state.usd_uah = money("44.83")
+    state.lexus_saved_usd = money("150")
+    state.parents_held_uah = money("10000")
+    totals = pile_totals(state)
+    assert income_uah(state) == money("22300.00")
+    assert totals["saved_uah"] == money("6690.00")
+    assert totals["parents_usd"] == money("221.73")
+    assert totals["total_usd"] == money("371.73")
+    assert totals["total_uah"] == money("16690.00")
 
 
 def test_undo_snapshot_restores_balances():

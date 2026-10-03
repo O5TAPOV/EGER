@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from payday_bot.model import State
+from payday_bot.model import State, buy_rate, sell_rate
 from payday_bot.money import fmt, money, next_friday
 from payday_bot.plan import Plan, build_plan, immediate_dues
 
@@ -13,19 +13,17 @@ REASONS = {
 }
 
 
-def sell_rate(state: State):
-    return state.usd_uah if state.usd_uah > 0 else money(1)
-
-
 def pile_totals(state: State):
-    rate = sell_rate(state)
-    saved_uah = money(state.lexus_saved_usd * rate)
-    parents_usd = money(state.parents_held_uah / rate) if state.parents_held_uah else money(0)
+    buy = buy_rate(state)
+    sell = sell_rate(state)
+    saved_uah = money(state.lexus_saved_usd * buy)
+    parents_usd = money(state.parents_held_uah / sell) if state.parents_held_uah else money(0)
     total_usd = money(state.lexus_saved_usd + parents_usd)
     total_uah = money(saved_uah + state.parents_held_uah)
     left_usd = money(state.lexus_target_usd - total_usd)
     return {
-        "rate": rate,
+        "buy": buy,
+        "sell": sell,
         "saved_uah": saved_uah,
         "parents_usd": parents_usd,
         "total_usd": total_usd,
@@ -34,14 +32,17 @@ def pile_totals(state: State):
     }
 
 
+def render_rates(state: State) -> str:
+    return (
+        f"💱 X-Change: долари → гривні {fmt(buy_rate(state))}, "
+        f"гривні → долари {fmt(sell_rate(state))}."
+    )
+
+
 def render_pile(state: State) -> str:
     totals = pile_totals(state)
-    buy = state.xchange_buy
-    rate_line = f"💱 X-Change, продаж {fmt(totals['rate'])}"
-    if buy > 0:
-        rate_line += f", купівля {fmt(buy)}"
     lines = [
-        rate_line,
+        render_rates(state),
         f"💵 Твої долари: {fmt(state.lexus_saved_usd)} $ = {fmt(totals['saved_uah'])} грн",
         f"👪 У батьків: {fmt(state.parents_held_uah)} грн = {fmt(totals['parents_usd'])} $",
         f"🚗 Разом: {fmt(totals['total_usd'])} $ = {fmt(totals['total_uah'])} грн",
@@ -87,13 +88,14 @@ def render_plan(state: State, today: date) -> str:
         friday = build_plan(state, payday, drop_dues_before=payday)
     else:
         friday = build_plan(state, payday)
-    parts.append(render_friday(friday, state.usd_uah))
+    parts.append(render_friday(friday, state))
     return "\n".join(parts).strip()
 
 
-def render_friday(plan: Plan, usd_uah) -> str:
+def render_friday(plan: Plan, state: State) -> str:
     lines = [f"📅 П'ятниця {plan.payday.strftime('%d.%m')}", ""]
-    lines.append(f"💵 Зарплата ~{fmt(plan.income)} грн")
+    lines.append(f"💵 Зарплата ~{fmt(plan.income)} грн (${fmt(state.weekly_income_usd)} × {fmt(buy_rate(state))})")
+    lines.append(render_rates(state))
     if plan.rent > 0:
         lines.append(f"🏠 Хата: {fmt(plan.rent)} грн")
         lines.append(f"🛒 На їжу і дрібне цього тижня: {fmt(plan.living)} грн")
@@ -103,7 +105,7 @@ def render_friday(plan: Plan, usd_uah) -> str:
         lines.append(f"👪 Батькам цього тижня: {fmt(plan.parents)} грн")
 
     if plan.mode == "lexus":
-        usd = money(plan.lexus_uah / money(usd_uah)) if plan.lexus_uah > 0 else money(0)
+        usd = money(plan.lexus_uah / sell_rate(state)) if plan.lexus_uah > 0 else money(0)
         lines.append(f"🚗 У долари: {fmt(plan.lexus_uah)} грн (~{fmt(usd)} $)")
         lines.append("✅ Боргів немає. Десятку на кредит більше не відкладаєш.")
         if usd > 0:
@@ -151,6 +153,7 @@ def render_hold(state: State, today: date) -> str:
         "",
         f"🛒 {fmt(state.living_uah)} грн на життя цього тижня можна тратити.",
         "🔥 Гроші, які вже відклав на борг, і те, що лежить на закриття розстрочки, не чіпаєш.",
+        render_rates(state),
     ]
     for debt in immediate_dues(state, today, payday):
         lines.append(
@@ -174,8 +177,8 @@ def render_lexus(state: State, rate_note: str = "") -> str:
     if state.open_debts() or state.parked_uah > 0:
         lines.append("Поки є борг, нові п'ятниці ще гасять кредит, а не машину.")
     elif totals["left_usd"] > 0:
-        free = money(state.weekly_income_usd * sell_rate(state) - state.living_uah)
-        per_week = money(free / sell_rate(state)) if free > 0 else money(0)
+        free = money(state.weekly_income_usd * buy_rate(state) - state.living_uah)
+        per_week = money(free / sell_rate(state)) if free > 0 and sell_rate(state) > 0 else money(0)
         if per_week > 0:
             weeks = int((totals["left_usd"] / per_week).to_integral_value(rounding="ROUND_CEILING"))
             lines.append(f"📆 У вільний тиждень виходить ~{fmt(per_week)} $. Якщо так щоп'ятниці, лишилось близько {weeks}.")

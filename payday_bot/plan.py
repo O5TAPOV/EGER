@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from payday_bot.model import State
+from payday_bot.model import State, buy_rate
 from payday_bot.money import is_first_friday, is_second_friday, money, next_friday
 
 
@@ -48,7 +48,7 @@ class Plan:
 
 
 def income_uah(state: State):
-    return money(state.weekly_income_usd * state.usd_uah)
+    return money(state.weekly_income_usd * buy_rate(state))
 
 
 def week_split(state: State, payday: date):
