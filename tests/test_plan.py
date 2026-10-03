@@ -102,3 +102,37 @@ def test_money_format():
     assert fmt(Decimal("1189.30")) == "1 189,30"
     assert fmt(11415) == "11 415"
     assert fmt("8068.73") == "8 068,73"
+
+
+def test_xchange_parser_reads_vinnytsia_usd():
+    from payday_bot.xchange import parse_usd_page
+
+    html = "<table><tr><td>USD/UAH</td><td>44.6</td><td>45.1</td></tr></table>"
+    assert parse_usd_page(html) == (money("44.6"), money("45.1"))
+
+
+def test_pile_uses_sell_rate_for_both_piles():
+    from payday_bot.render import pile_totals
+
+    state = initial_state()
+    state.usd_uah = money("45.10")
+    state.lexus_saved_usd = money("100")
+    state.parents_held_uah = money("4510")
+    totals = pile_totals(state)
+    assert totals["saved_uah"] == money("4510")
+    assert totals["parents_usd"] == money("100")
+    assert totals["total_usd"] == money("200")
+    assert totals["total_uah"] == money("9020")
+
+
+def test_undo_snapshot_restores_balances():
+    from payday_bot.plan import money_snapshot, restore_snapshot
+
+    state = cleared_tomorrow()
+    plan = build_plan(state, date(2026, 10, 9))
+    snap = money_snapshot(state)
+    apply_plan(state, plan)
+    assert state.debt("mouse").balance == 0
+    restore_snapshot(state, snap)
+    assert state.debt("mouse").balance == money("1189.30")
+    assert "2026-10-09" not in state.applied_paydays

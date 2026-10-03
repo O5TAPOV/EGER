@@ -278,3 +278,23 @@ def project_weeks(state: State, start: date, count: int) -> list[tuple[Plan, Sta
         result.append((plan, _copy_state(cursor)))
         day = payday + timedelta(days=1)
     return result
+
+
+def money_snapshot(state: State) -> dict:
+    return {
+        "debts": {debt.id: f"{debt.balance:.2f}" for debt in state.debts},
+        "parked_uah": f"{state.parked_uah:.2f}",
+        "windfall_uah": f"{state.windfall_uah:.2f}",
+        "installment_paid": dict(state.installment_paid),
+        "applied_paydays": list(state.applied_paydays),
+    }
+
+
+def restore_snapshot(state: State, snap: dict) -> None:
+    for debt in state.debts:
+        if debt.id in snap["debts"]:
+            debt.balance = money(snap["debts"][debt.id])
+    state.parked_uah = money(snap["parked_uah"])
+    state.windfall_uah = money(snap["windfall_uah"])
+    state.installment_paid = dict(snap["installment_paid"])
+    state.applied_paydays = list(snap["applied_paydays"])

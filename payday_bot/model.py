@@ -69,6 +69,9 @@ class State:
     windfall_uah: Decimal = field(default_factory=lambda: money(0))
     lexus_target_usd: Decimal = field(default_factory=lambda: money(10000))
     lexus_saved_usd: Decimal = field(default_factory=lambda: money(0))
+    parents_held_uah: Decimal = field(default_factory=lambda: money(0))
+    xchange_buy: Decimal = field(default_factory=lambda: money(0))
+    undo: list = field(default_factory=list)
     debts: list[Debt] = field(default_factory=list)
     installment_paid: dict[str, str] = field(default_factory=dict)
     applied_paydays: list[str] = field(default_factory=list)
@@ -98,6 +101,9 @@ class State:
             "windfall_uah": f"{self.windfall_uah:.2f}",
             "lexus_target_usd": f"{self.lexus_target_usd:.2f}",
             "lexus_saved_usd": f"{self.lexus_saved_usd:.2f}",
+            "parents_held_uah": f"{self.parents_held_uah:.2f}",
+            "xchange_buy": f"{self.xchange_buy:.2f}",
+            "undo": self.undo,
             "debts": [item.to_json() for item in self.debts],
             "installment_paid": self.installment_paid,
             "applied_paydays": self.applied_paydays,
@@ -120,6 +126,9 @@ class State:
             windfall_uah=money(raw.get("windfall_uah", 0)),
             lexus_target_usd=money(raw.get("lexus_target_usd", 10000)),
             lexus_saved_usd=money(raw.get("lexus_saved_usd", 0)),
+            parents_held_uah=money(raw.get("parents_held_uah", 0)),
+            xchange_buy=money(raw.get("xchange_buy", 0)),
+            undo=list(raw.get("undo") or []),
             debts=[Debt.from_json(item) for item in raw["debts"]],
             installment_paid=dict(raw.get("installment_paid", {})),
             applied_paydays=list(raw.get("applied_paydays", [])),
