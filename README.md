@@ -79,23 +79,19 @@ docker compose logs -f
 
 ## Бот хати
 
-Це інший бот і інша папка. `docker compose up` у корені піднімає тільки зарплату.
-
-Антон готує, Назар прибирає і дивиться котів, Максим ходить у магазин. О 17:00 приходить рецепт, якщо кухня ще відкрита. О 21:00 нагадування лише по тому, що досі висить.
-
-У BotFather створи другого бота. На сервері:
+Це інший бот і інша папка на сервері: `~/flat-bot`. `docker compose up` у `~/payday-bot` піднімає тільки зарплату.
 
 ```bash
 cd ~/payday-bot
 git pull
 docker compose up -d --build --remove-orphans
 
-cd flat-bot
+rm -rf ~/flat-bot
+cp -a ~/payday-bot/flat-bot ~/flat-bot
+cd ~/flat-bot
 cp .env.example .env
-# у .env лише FLAT_BOT_TOKEN
-docker compose up -d --build
 ```
 
-Додай бота в групу хати і напиши `/start`. Кожен один раз: `/me anton`, `/me nazar`, `/me maksym`.
+У `.env` хати тільки `FLAT_BOT_TOKEN` від другого бота в BotFather. Потім `docker compose up -d --build` уже з `~/flat-bot`.
 
 Позика, яку віддаєш сам: у боті зарплати `/owe Ватіля 3500`.

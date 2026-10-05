@@ -1,8 +1,6 @@
 services:
   flat:
-    build:
-      context: ..
-      dockerfile: flat-bot/Dockerfile
+    build: .
     restart: unless-stopped
     env_file: .env
     volumes:
