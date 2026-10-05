@@ -50,11 +50,28 @@ def test_hate_resets_today_menu():
         assert "куря" not in " ".join(dish.ingredients)
 
 
-def test_every_dish_is_short():
-    menu = day_menu(date(2026, 10, 6), [])
-    for dish in menu.values():
+def test_every_dish_is_short_and_step_by_step():
+    from ration_bot.meals import DISHES
+
+    for dish in DISHES:
         assert dish.minutes <= 15
-        assert dish.steps
+        assert len(dish.steps) >= 4
+
+
+def test_he_gets_one_meal_and_a_roast_when_he_sins():
+    from ration_bot.talk import intent, roast_cheat, roast_weight, slot_for_hour
+
+    assert intent("бля, я тута в макові щас хаваю, ізвінітісь") == "cheat"
+    assert intent("проснувся, нада поснідати") == "breakfast"
+    assert intent("чота жрать хочу, чо здєлать?") == "hungry"
+    assert intent("якщо є вільні бабки, шо за імба") == "money"
+    assert slot_for_hour(9) == "breakfast"
+    assert slot_for_hour(13) == "lunch"
+    assert slot_for_hour(19) == "dinner"
+    text = roast_weight(111.6)
+    assert "111.6" in text
+    assert "100" in text
+    assert "Мак" in roast_cheat()
 
 
 def test_training_starts_at_his_numbers_and_grows_after_four_sessions():

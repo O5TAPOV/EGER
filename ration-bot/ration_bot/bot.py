@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-import logging
 import os
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from ration_bot.meals import SLOTS, render_menu
+from ration_bot.meals import SLOTS, render_dish, render_menu
+from ration_bot.talk import intent, meal_call, next_buy, roast_cheat, roast_scam, roast_weight, slot_for_hour
 from ration_bot.store import (
     State,
     add_hate,
     add_weight,
     load_state,
+    mark_owned,
     mark_trained,
     menu_for,
     remove_hate,
@@ -25,7 +26,6 @@ from ration_bot.store import (
 from ration_bot.train import DAY_ALIASES, DAY_NAMES, is_train_day, render_rest, render_train
 
 KYIV = ZoneInfo("Europe/Kyiv")
-log = logging.getLogger("ration_bot")
 SLOT_WORDS = {
     "breakfast": "breakfast",
     "сніданок": "breakfast",
@@ -83,17 +83,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         update,
         "\n".join(
             [
-                "🍽 Це твій бот по їжі і трені. Хата і зарплата його не бачать.",
-                "Вранці о 10:00 кине меню на день і трену, якщо сьогодні коло.",
+                "Це твій бот. Хата і зарплата його не чують.",
+                "Не вивалюю весь день зранку. Пиши як є:",
+                "«проснувся, треба поснідати», «жрать хочу», «я в макові, ізвінітісь».",
                 "",
-                "/menu — що їсти",
-                "/shop — що купити під це меню",
-                "/hate гриби — більше не пропонувати",
-                "/unhate гриби — повернути",
+                "/hate гриби — цей продукт більше не чіпаю",
                 "/next dinner — інша вечеря",
-                "/train — сет на сьогодні",
-                "/done — коло закрив",
-                "/weight 110 — вага раз на тиждень",
+                "/shop — що купити під сьогодні",
+                "/train — сет, /done — коло закрив",
+                "/weight 111.6 — вага раз на тиждень",
+                "/got creatine — коли креатин уже в хаті",
             ]
         ),
     )
@@ -131,7 +130,7 @@ async def hate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     add_hate(state, words)
     save_state(path, state)
-    await _reply(update, "Прибрав з меню: " + ", ".join(words) + ".\n\n" + render_menu(menu_for(state, _today()), state.hates))
+    await _reply(update, "Записав. Цього в тарілці більше не буде: " + ", ".join(words) + ".")
 
 
 async def unhate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -159,7 +158,7 @@ async def next_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     menu = reroll(state, _today(), slot)
     save_state(path, state)
-    await _reply(update, render_menu(menu, state.hates))
+    await _reply(update, _one(state, menu[slot], slot))
 
 
 async def train_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -217,8 +216,8 @@ async def weight_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     extra = ""
     if result["delta"] is not None:
         sign = "+" if result["delta"] > 0 else ""
-        extra = f"\nВід минулого разу: {sign}{result['delta']} кг"
-    await _reply(update, f"Записав {result['row']['kg']} кг.{extra}\nРаз на тиждень, вранці, до води.")
+        extra = f"\nВід минулого разу: {sign}{result['delta']} кг."
+    await _reply(update, roast_weight(result["row"]["kg"]) + extra + "\n\n" + next_buy(state.owned))
 
 
 async def days_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -245,25 +244,57 @@ async def days_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply(update, f"Треня тепер: {names}.")
 
 
-def morning_text(state: State, day) -> str:
-    parts = [render_menu(menu_for(state, day), state.hates), "", "🛒 " + ", ".join(shop_lines(state, day))]
-    parts.append("")
-    if is_train_day(day, state.train_days):
-        parts.append(render_train(state.level, done_at_level=state.done_at_level))
-    else:
-        parts.append(render_rest())
-    return "\n".join(parts)
+def _one(state: State, dish, slot: str) -> str:
+    return meal_call(slot, state.kg) + "\n\n" + render_dish(slot, dish) + f"\n\nІнша: /next {slot}"
 
 
-async def job_morning(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def got_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     path = state_path()
     state = ensure_state()
-    if not state.chat_id:
-        log.info("раціон ще ніхто не відкривав")
+    if not _allowed(update, state):
         return
-    text = morning_text(state, _today())
+    token = (context.args[0].casefold() if context.args else "").strip()
+    aliases = {"креатин": "creatine", "протеїн": "protein", "протеин": "protein", "доріжка": "walkpad", "пад": "walkpad"}
+    key = aliases.get(token, token)
+    if key not in {"creatine", "protein", "walkpad"}:
+        await _reply(update, "Приймаю /got creatine, /got protein або /got walkpad.")
+        return
+    mark_owned(state, key)
     save_state(path, state)
-    await context.bot.send_message(chat_id=state.chat_id, text=text)
+    await _reply(update, "Ок, це вже є.\n\n" + next_buy(state.owned))
+
+
+async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    path = state_path()
+    state = ensure_state()
+    if not _allowed(update, state):
+        return
+    text = update.message.text or ""
+    kind = intent(text)
+    today = _today()
+    hour = datetime.now(KYIV).hour
+    if kind == "cheat":
+        save_state(path, state)
+        await _reply(update, roast_cheat())
+        return
+    if kind == "scam":
+        save_state(path, state)
+        await _reply(update, roast_scam())
+        return
+    if kind == "money":
+        save_state(path, state)
+        await _reply(update, next_buy(state.owned))
+        return
+    if kind == "breakfast":
+        slot = "breakfast"
+    elif kind == "hungry":
+        slot = slot_for_hour(hour)
+    else:
+        await _reply(update, "Не в'їхав. Напиши, що проснувся, що жрать хочеш, або що згрішив у макові.")
+        return
+    dish = menu_for(state, today)[slot]
+    save_state(path, state)
+    await _reply(update, _one(state, dish, slot))
 
 
 def build_app(token: str) -> Application:
@@ -278,8 +309,6 @@ def build_app(token: str) -> Application:
     app.add_handler(CommandHandler("done", done_cmd))
     app.add_handler(CommandHandler("weight", weight_cmd))
     app.add_handler(CommandHandler("days", days_cmd))
-    if app.job_queue is not None:
-        from datetime import time
-
-        app.job_queue.run_daily(job_morning, time=time(10, 0, tzinfo=KYIV))
+    app.add_handler(CommandHandler("got", got_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, talk))
     return app

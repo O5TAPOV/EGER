@@ -19,6 +19,8 @@ class State:
     trained: list[str] = field(default_factory=list)
     train_days: list[int] = field(default_factory=lambda: list(DEFAULT_DAYS))
     weights: list[dict] = field(default_factory=list)
+    kg: float = 111.6
+    owned: list[str] = field(default_factory=list)
     menu_date: str = ""
     shifts: dict = field(default_factory=dict)
 
@@ -32,6 +34,8 @@ class State:
             "trained": self.trained,
             "train_days": self.train_days,
             "weights": self.weights,
+            "kg": self.kg,
+            "owned": self.owned,
             "menu_date": self.menu_date,
             "shifts": self.shifts,
         }
@@ -47,6 +51,8 @@ class State:
             trained=list(raw.get("trained") or []),
             train_days=list(raw.get("train_days") or list(DEFAULT_DAYS)),
             weights=list(raw.get("weights") or []),
+            kg=float(raw.get("kg") or 111.6),
+            owned=list(raw.get("owned") or []),
             menu_date=raw.get("menu_date") or "",
             shifts=dict(raw.get("shifts") or {}),
         )
@@ -117,9 +123,15 @@ def mark_trained(state: State, day: date) -> str:
     return "ok"
 
 
+def mark_owned(state: State, key: str) -> None:
+    if key not in state.owned:
+        state.owned.append(key)
+
+
 def add_weight(state: State, day: date, kg: float) -> dict:
     previous = state.weights[-1]["kg"] if state.weights else None
     row = {"date": day.isoformat(), "kg": round(kg, 1)}
+    state.kg = row["kg"]
     state.weights.append(row)
     state.weights = state.weights[-60:]
     delta = None if previous is None else round(row["kg"] - previous, 1)
