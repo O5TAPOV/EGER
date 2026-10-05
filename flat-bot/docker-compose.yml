@@ -1,0 +1,12 @@
+services:
+  flat:
+    build:
+      context: ..
+      dockerfile: flat-bot/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - flat-data:/app/data
+
+volumes:
+  flat-data:

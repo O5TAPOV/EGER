@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY payday_bot ./payday_bot
+COPY flat_bot ./flat_bot
 
 ENV PYTHONUNBUFFERED=1
-CMD ["python", "-m", "payday_bot"]
+CMD ["python", "-m", "flat_bot"]

@@ -6,14 +6,5 @@ services:
     volumes:
       - payday-data:/app/data
 
-  flat:
-    build: .
-    restart: unless-stopped
-    env_file: .env
-    command: ["python", "-m", "flat_bot"]
-    volumes:
-      - flat-data:/app/data
-
 volumes:
   payday-data:
-  flat-data:
