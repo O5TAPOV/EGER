@@ -94,4 +94,16 @@ cp .env.example .env
 
 У `.env` хати тільки `FLAT_BOT_TOKEN` від другого бота в BotFather. Потім `docker compose up -d --build` уже з `~/flat-bot`.
 
+## Раціон
+
+Третій бот, особистий, папка `~/ration-bot`. Вранці о 10:00 кидає меню, покупки і трену.
+
+```bash
+cp -a ~/payday-bot/ration-bot ~/ration-bot
+cd ~/ration-bot
+cp .env.example .env
+```
+
+У `.env` тільки `RATION_BOT_TOKEN`. Далі `docker compose up -d --build`. У приватному чаті: `/start`, гриби прибираються через `/hate гриби`.
+
 Позика, яку віддаєш сам: у боті зарплати `/owe Ватіля 3500`.
