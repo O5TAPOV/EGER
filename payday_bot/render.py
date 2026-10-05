@@ -63,6 +63,8 @@ def render_balances(state: State) -> str:
             extra = f", місяць {fmt(debt.monthly)} або вся сума"
         if debt.due is not None and debt.settle == "asap":
             extra = f", до {debt.due.strftime('%d.%m')}"
+        if debt.settle == "manual":
+            extra = ". Сам віддаєш, п'ятничний план це не чіпає"
         lines.append(f"• {debt.title}: {fmt(debt.balance)} грн{extra}")
     if state.parked_uah > 0:
         lines.append(f"🅿️ Окремо на розстрочку: {fmt(state.parked_uah)} грн. Це не життя.")

@@ -154,3 +154,13 @@ def test_undo_snapshot_restores_balances():
     restore_snapshot(state, snap)
     assert state.debt("mouse").balance == money("1189.30")
     assert "2026-10-09" not in state.applied_paydays
+
+
+def test_manual_debt_stays_out_of_friday_plan():
+    from payday_bot.model import Debt
+
+    state = initial_state()
+    state.debts.append(Debt("ватіля", "Ватіля", money("3500"), "manual"))
+    plan = build_plan(state, date(2026, 10, 16))
+    assert all(payment.debt_id != "ватіля" for payment in plan.payments)
+    assert state.debt("ватіля").balance == money("3500")

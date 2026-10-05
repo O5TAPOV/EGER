@@ -236,6 +236,43 @@ async def undo_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply(update, "↩️ Повернув залишки як до останнього /done.\n\n" + render_balances(state))
 
 
+async def owe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    path = state_path()
+    state = ensure_state()
+    if not _allowed(update, state):
+        return
+    if len(context.args) < 2:
+        await _reply(update, "Приклад: /owe Ватіля 3500")
+        return
+    try:
+        amount = parse_amount(context.args[-1])
+    except Exception:
+        await _reply(update, "Не бачу суму. Приклад: /owe Ватіля 3500")
+        return
+    if amount <= 0:
+        await _reply(update, "Сума має бути більша за нуль.")
+        return
+    title = " ".join(context.args[:-1]).strip()
+    debt_id = "".join(ch for ch in title.casefold() if ch.isalnum())
+    if not title or not debt_id:
+        await _reply(update, "Приклад: /owe Ватіля 3500")
+        return
+    from payday_bot.model import Debt
+
+    existing = find_debt(debt_id, state)
+    if existing is None:
+        state.debts.append(Debt(debt_id, title, amount, "manual"))
+    else:
+        existing.balance = amount
+        existing.settle = "manual"
+    save_state(path, state)
+    await _reply(
+        update,
+        f"Записав: {title} {fmt(amount)} грн. П'ятничний план це не чіпає, віддаєш сам. Закрив: /set {debt_id} 0\n\n"
+        + render_balances(state),
+    )
+
+
 async def set_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     path = state_path()
     state = ensure_state()
@@ -363,6 +400,7 @@ def build_app(token: str) -> Application:
     app.add_handler(CommandHandler("parents", parents_cmd))
     app.add_handler(CommandHandler("undo", undo_cmd))
     app.add_handler(CommandHandler("set", set_cmd))
+    app.add_handler(CommandHandler("owe", owe_cmd))
     app.add_handler(CommandHandler("got", got_cmd))
     app.add_handler(CommandHandler("rate", rate_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, buttons))

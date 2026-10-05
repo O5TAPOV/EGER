@@ -52,6 +52,9 @@ def find_debt(token: str, state: State) -> Debt | None:
     try:
         return state.debt(debt_id)
     except KeyError:
+        for debt in state.debts:
+            if debt.title.casefold() == key or debt.id.casefold() == key:
+                return debt
         return None
 
 
