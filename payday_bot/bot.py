@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from telegram import ReplyKeyboardMarkup, Update
+from telegram import BotCommand, ReplyKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from payday_bot.model import load_state, save_state
@@ -36,6 +36,20 @@ KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 log = logging.getLogger("payday_bot")
+COMMANDS = (
+    BotCommand("start", "План і як це працює"),
+    BotCommand("plan", "План на найближчу п'ятницю"),
+    BotCommand("debts", "Залишки боргів"),
+    BotCommand("done", "П'ятничний план уже оплатив"),
+    BotCommand("lexus", "Скільки зібрано на Лексус"),
+    BotCommand("saved", "Свої долари"),
+    BotCommand("parents", "Гривні, відкладені батькам"),
+    BotCommand("undo", "Відкотити останню оплату"),
+    BotCommand("set", "Поставити залишок боргу"),
+    BotCommand("owe", "Позика, яку віддаєш сам"),
+    BotCommand("got", "Скільки грошей повернули"),
+    BotCommand("rate", "Вписати курс долара руками"),
+)
 
 
 def state_path() -> Path:
@@ -389,8 +403,12 @@ async def job_rate(context: ContextTypes.DEFAULT_TYPE) -> None:
     log.info(note or f"X-Change {state.xchange_buy}/{state.xchange_sell}")
 
 
+async def _publish_commands(app: Application) -> None:
+    await app.bot.set_my_commands(list(COMMANDS))
+
+
 def build_app(token: str) -> Application:
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_publish_commands).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("plan", plan_cmd))
     app.add_handler(CommandHandler("debts", debts_cmd))

@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from ration_bot.meals import SLOTS, budget_line, render_dish, render_menu
@@ -26,6 +26,19 @@ from ration_bot.store import (
 from ration_bot.train import DAY_ALIASES, DAY_NAMES, is_train_day, render_rest, render_train
 
 KYIV = ZoneInfo("Europe/Kyiv")
+COMMANDS = (
+    BotCommand("start", "Що вміє цей бот"),
+    BotCommand("menu", "Тарілки на день і норма ккал"),
+    BotCommand("shop", "Що купити під сьогодні"),
+    BotCommand("hate", "Прибрати продукт з тарілок"),
+    BotCommand("unhate", "Повернути продукт"),
+    BotCommand("next", "Інша страва на цей прийом"),
+    BotCommand("train", "Сьогоднішнє коло"),
+    BotCommand("done", "Коло закрив"),
+    BotCommand("weight", "Записати ранкову вагу"),
+    BotCommand("days", "Дні трені"),
+    BotCommand("got", "Креатин, протеїн або доріжка вже є"),
+)
 SLOT_WORDS = {
     "breakfast": "breakfast",
     "сніданок": "breakfast",
@@ -300,8 +313,12 @@ async def talk(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply(update, _one(state, dish, slot))
 
 
+async def _publish_commands(app: Application) -> None:
+    await app.bot.set_my_commands(list(COMMANDS))
+
+
 def build_app(token: str) -> Application:
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_publish_commands).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("menu", menu_cmd))
     app.add_handler(CommandHandler("shop", shop_cmd))

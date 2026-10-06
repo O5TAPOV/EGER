@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from telegram import ReplyKeyboardMarkup, Update
+from telegram import BotCommand, ReplyKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from flat_bot.chores import (
@@ -39,6 +39,20 @@ KEYBOARD = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 log = logging.getLogger("flat_bot")
+COMMANDS = (
+    BotCommand("start", "Хто за що в хаті"),
+    BotCommand("me", "Записати, хто ти"),
+    BotCommand("duties", "Справи на сьогодні"),
+    BotCommand("done", "Закрити справу"),
+    BotCommand("nag", "Хто досі висить"),
+    BotCommand("cook", "Вечеря до 15 хвилин руками"),
+    BotCommand("buy", "Додати в закупки"),
+    BotCommand("list", "Список закупок"),
+    BotCommand("bought", "Закупки закриті"),
+    BotCommand("weight", "Ранкова вага"),
+    BotCommand("multi", "Мультиварка є чи ще ні"),
+    BotCommand("give", "Перекинути справу на іншого"),
+)
 
 BUTTONS = {
     "🍽 рецепт": "cook",
@@ -370,8 +384,12 @@ async def job_nag(context: ContextTypes.DEFAULT_TYPE) -> None:
     await _send(context, text)
 
 
+async def _publish_commands(app: Application) -> None:
+    await app.bot.set_my_commands(list(COMMANDS))
+
+
 def build_app(token: str) -> Application:
-    app = Application.builder().token(token).build()
+    app = Application.builder().token(token).post_init(_publish_commands).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("me", me_cmd))
     app.add_handler(CommandHandler("duties", duties_cmd))
