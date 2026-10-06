@@ -1,0 +1,10 @@
+services:
+  flat:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - flat-data:/app/data
+
+volumes:
+  flat-data:
