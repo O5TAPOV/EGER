@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
-from ration_bot.meals import SLOTS, render_dish, render_menu
+from ration_bot.meals import SLOTS, budget_line, render_dish, render_menu
 from ration_bot.talk import intent, meal_call, next_buy, roast_cheat, roast_scam, roast_weight, slot_for_hour
 from ration_bot.store import (
     State,
@@ -103,7 +103,7 @@ async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = ensure_state()
     if not _allowed(update, state):
         return
-    text = render_menu(menu_for(state, _today()), state.hates)
+    text = render_menu(menu_for(state, _today()), state.hates, state.kg)
     save_state(path, state)
     await _reply(update, text)
 
@@ -143,7 +143,7 @@ async def unhate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     remove_hate(state, " ".join(context.args))
     save_state(path, state)
-    await _reply(update, render_menu(menu_for(state, _today()), state.hates))
+    await _reply(update, render_menu(menu_for(state, _today()), state.hates, state.kg))
 
 
 async def next_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -217,7 +217,10 @@ async def weight_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if result["delta"] is not None:
         sign = "+" if result["delta"] > 0 else ""
         extra = f"\nВід минулого разу: {sign}{result['delta']} кг."
-    await _reply(update, roast_weight(result["row"]["kg"]) + extra + "\n\n" + next_buy(state.owned))
+    await _reply(
+        update,
+        roast_weight(result["row"]["kg"]) + extra + "\n\n" + budget_line(result["row"]["kg"]) + "\n\n" + next_buy(state.owned),
+    )
 
 
 async def days_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -245,7 +248,7 @@ async def days_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _one(state: State, dish, slot: str) -> str:
-    return meal_call(slot, state.kg) + "\n\n" + render_dish(slot, dish) + f"\n\nІнша: /next {slot}"
+    return meal_call(slot, state.kg) + "\n\n" + render_dish(slot, dish, kg=state.kg) + f"\n\nІнша: /next {slot}"
 
 
 async def got_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

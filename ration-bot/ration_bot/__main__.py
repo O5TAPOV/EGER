@@ -13,7 +13,7 @@ from ration_bot.train import render_train
 def preview() -> str:
     state = State(hates=["гриби"])
     day = date(2026, 10, 5)
-    return render_menu(menu_for(state, day), state.hates) + "\n\n" + render_train(0, done_at_level=0)
+    return render_menu(menu_for(state, day), state.hates, state.kg) + "\n\n" + render_train(0, done_at_level=0)
 
 
 def main() -> None:

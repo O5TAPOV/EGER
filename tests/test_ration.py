@@ -6,10 +6,15 @@ from ration_bot.train import is_train_day, level_row, render_train
 
 
 def test_mushrooms_drop_out_when_banned():
+    from ration_bot.meals import options
+
     menu = day_menu(date(2026, 10, 5), ["гриби"])
     for dish in menu.values():
         assert not blocked(dish, ["гриби"])
         assert "гриб" not in " ".join(dish.ingredients)
+    lunch_ids = {dish.id for dish in options("lunch", ["гриби"])}
+    assert "tuna-buckwheat" in lunch_ids
+    assert "hake-salad" in lunch_ids
 
 
 def test_onion_and_chicken_stems_are_enough():
@@ -92,3 +97,34 @@ def test_training_starts_at_his_numbers_and_grows_after_four_sessions():
 def test_train_days_are_monday_wednesday_friday():
     assert is_train_day(date(2026, 10, 5), [0, 2, 4])
     assert not is_train_day(date(2026, 10, 6), [0, 2, 4])
+
+
+def test_macros_match_the_plate_and_name_the_fat_percent():
+    from ration_bot.meals import DISHES, metabolism, render_dish, render_menu
+
+    row = metabolism(111.6)
+    assert 2600 <= row["burn"] <= 3100
+    assert row["goal"] == row["burn"] - 500
+    assert row["goal"] >= 2000
+    light = metabolism(70)
+    assert light["goal"] >= 2000
+
+    by_id = {dish.id: dish for dish in DISHES}
+    assert "5%" in by_id["tvorog"].fat_label
+    assert "0,2%" in by_id["tvorog"].fat_label
+    assert "1,5%" in by_id["oats"].fat_label
+    for dish in DISHES:
+        assert dish.kcal == round(dish.protein * 4 + dish.fat * 9 + dish.carbs * 4)
+        assert dish.kcal >= 450
+        if any("тунець" in item for item in dish.shop):
+            assert "соку" in dish.fat_label
+        if any("фарш" in item for item in dish.shop):
+            assert "5%" in dish.fat_label
+
+    tvorog = render_dish("breakfast", by_id["tvorog"])
+    assert "🏷" in tvorog
+    assert "БЖУ" in tvorog
+    menu = render_menu(day_menu(date(2026, 10, 5), []), [], kg=110.4)
+    assert str(metabolism(110.4)["goal"]) in menu
+    assert "голодов" in menu
+    assert "творогу 5%" in menu
