@@ -1,0 +1,10 @@
+services:
+  ration:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ration-data:/app/data
+
+volumes:
+  ration-data:

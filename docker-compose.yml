@@ -1,0 +1,10 @@
+services:
+  payday:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - payday-data:/app/data
+
+volumes:
+  payday-data:
