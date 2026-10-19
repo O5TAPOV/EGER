@@ -52,9 +52,9 @@ def render_pile(state: State) -> str:
 
 
 def render_balances(state: State) -> str:
-    lines = ["💳 Залишки:"]
+    lines = ["💳 Фінансові плани:"]
     if not state.open_debts() and state.parked_uah <= 0:
-        lines.append("✅ Боргів немає.")
+        lines.append("✅ Плани закриті.")
     for debt in state.debts:
         if debt.balance <= 0:
             continue
@@ -109,16 +109,16 @@ def render_friday(plan: Plan, state: State) -> str:
     if plan.mode == "lexus":
         usd = money(plan.lexus_uah / sell_rate(state)) if plan.lexus_uah > 0 else money(0)
         lines.append(f"🚗 У долари: {fmt(plan.lexus_uah)} грн (~{fmt(usd)} $)")
-        lines.append("✅ Боргів немає. Десятку на кредит більше не відкладаєш.")
+        lines.append("✅ Плани закриті. Десятку на кредит більше не відкладаєш.")
         if usd > 0:
             lines.append("Як купиш долари, напиши /saved +сума.")
         return "\n".join(lines)
 
-    lines.append(f"🔥 У борг іде {fmt(plan.debt_budget)} грн")
+    lines.append(f"🔥 На плани йде {fmt(plan.debt_budget)} грн")
     lines.append("")
     lines.append("Гасиш:")
     if not plan.payments:
-        lines.append("• Цього тижня в борг з зарплати не виходить.")
+        lines.append("• Цього тижня на плани з зарплати не виходить.")
     for payment in plan.payments:
         lines.append(f"• {payment.title}: {fmt(payment.amount)} грн ({REASONS[payment.reason]})")
     if plan.parked_after > 0:
@@ -134,7 +134,7 @@ def render_friday(plan: Plan, state: State) -> str:
         )
     if plan.extra_pocket > 0:
         lines.append(
-            f"✅ Борги закриваються, і ще лишається {fmt(plan.extra_pocket)} грн. "
+            f"✅ Плани закриваються, і ще лишається {fmt(plan.extra_pocket)} грн. "
             "Купи на них долари і напиши /saved +сума."
         )
     if plan.budget_short:
@@ -154,7 +154,7 @@ def render_hold(state: State, today: date) -> str:
         f"⏳ До зарплати {days} дн. (п'ятниця {payday.strftime('%d.%m')}).",
         "",
         f"🛒 {fmt(state.living_uah)} грн на життя цього тижня можна тратити.",
-        "🔥 Гроші, які вже відклав на борг, і те, що лежить на закриття розстрочки, не чіпаєш.",
+        "🔥 Гроші, які вже відклав на плани, і те, що лежить на закриття розстрочки, не чіпаєш.",
         render_rates(state),
     ]
     for debt in immediate_dues(state, today, payday):
@@ -177,7 +177,7 @@ def render_lexus(state: State, rate_note: str = "") -> str:
         lines.append("")
     lines.append(render_pile(state))
     if state.open_debts() or state.parked_uah > 0:
-        lines.append("Поки є борг, нові п'ятниці ще гасять кредит, а не машину.")
+        lines.append("Поки плани відкриті, нові п'ятниці ще закривають кредит, а не машину.")
     elif totals["left_usd"] > 0:
         free = money(state.weekly_income_usd * buy_rate(state) - state.living_uah)
         per_week = money(free / sell_rate(state)) if free > 0 and sell_rate(state) > 0 else money(0)

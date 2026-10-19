@@ -47,6 +47,7 @@ def test_payday_slash_menu_lists_every_command():
     _menu_is_complete(COMMANDS, ROOT / "payday_bot" / "bot.py")
     described = {command.command: command.description for command in COMMANDS}
     assert "п'ятниц" in described["plan"]
+    assert "Фінансові плани" in described["debts"]
     assert "Лексус" in described["lexus"]
 
 

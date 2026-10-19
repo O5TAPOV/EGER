@@ -32,20 +32,20 @@ from payday_bot.seed import find_debt, initial_state, parse_amount
 
 KYIV = ZoneInfo("Europe/Kyiv")
 KEYBOARD = ReplyKeyboardMarkup(
-    [["📅 План", "💳 Борги"], ["✅ Готово", "🚗 Лексус"]],
+    [["📅 План", "💳 Фінанси"], ["✅ Готово", "🚗 Лексус"]],
     resize_keyboard=True,
 )
 log = logging.getLogger("payday_bot")
 COMMANDS = (
     BotCommand("start", "План і як це працює"),
     BotCommand("plan", "План на найближчу п'ятницю"),
-    BotCommand("debts", "Залишки боргів"),
+    BotCommand("debts", "Фінансові плани"),
     BotCommand("done", "П'ятничний план уже оплатив"),
     BotCommand("lexus", "Скільки зібрано на Лексус"),
     BotCommand("saved", "Свої долари"),
     BotCommand("parents", "Гривні, відкладені батькам"),
     BotCommand("undo", "Відкотити останню оплату"),
-    BotCommand("set", "Поставити залишок боргу"),
+    BotCommand("set", "Поставити залишок у плані"),
     BotCommand("owe", "Позика, яку віддаєш сам"),
     BotCommand("got", "Скільки грошей повернули"),
     BotCommand("rate", "Вписати курс долара руками"),
@@ -105,7 +105,9 @@ def refresh_rate(state) -> str:
 
 def button_name(text: str) -> str:
     folded = text.casefold()
-    for name in ("план", "борги", "готово", "лексус"):
+    if "фінанс" in folded or "борг" in folded:
+        return "фінанси"
+    for name in ("готово", "лексус", "план"):
         if name in folded:
             return name
     return ""
@@ -124,7 +126,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     save_state(path, state)
     text = (
         "Я пишу двічі на тиждень: у четвер о 19:00 план на п'ятницю, "
-        "у неділю о 12:00 щоб гроші на борг не зникли до зарплати.\n\n"
+        "у неділю о 12:00 щоб гроші на фінансові плани не зникли до зарплати.\n\n"
         + render_plan(state, today)
     )
     await _reply(update, text)
@@ -297,7 +299,7 @@ async def set_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     debt = find_debt(context.args[0], state)
     if debt is None:
-        await _reply(update, "Не знаю такого боргу. Є ліміт, телефон, екофлоу, мишка, завтра.")
+        await _reply(update, "Не знаю такого плану. Є ліміт, телефон, екофлоу, мишка, завтра.")
         return
     try:
         amount = parse_amount(context.args[1])
@@ -361,7 +363,7 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     name = button_name(update.message.text or "")
     if name == "план":
         await plan_cmd(update, context)
-    elif name == "борги":
+    elif name == "фінанси":
         await debts_cmd(update, context)
     elif name == "готово":
         await done_cmd(update, context)
