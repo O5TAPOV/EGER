@@ -5,3 +5,4 @@ __pycache__/
 .env
 data/state.json
 data/flat.json
+cv/
