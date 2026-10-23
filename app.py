@@ -30,6 +30,10 @@ POW_ZEROS = 4
 
 CHOICES = [
     ("dist", "Повністю дистанційно, поки тривоги такі часті"),
+    ("days", "Дистанційно на кілька днів"),
+    ("week", "Дистанційно на тиждень"),
+    ("two", "Дистанційно на два тижні"),
+    ("alt", "Змішане: дистанційне та очне по черзі"),
     ("mixed", "Лекції дистанційно, практика і лабораторні очно"),
     ("offline", "Лишати як зараз, очно"),
     ("unsure", "Не беруся сказати"),
@@ -332,7 +336,7 @@ def create_app(config=None):
         payload = {
             "day": stats["day"],
             "total": stats["total"],
-            "note": "Самовибірка. Один браузер — один голос. Це не список усіх студентів ВДПУ.",
+            "note": "Самовибірка. Один браузер - один голос. Це не список усіх студентів ВДПУ.",
             "choices": [
                 {"code": i["code"], "label": i["label"], "n": i["n"]} for i in stats["items"]
             ],
@@ -423,7 +427,7 @@ def create_app(config=None):
                     videos += 1
                 if videos > 1:
                     (upload_dir / stored_name).unlink(missing_ok=True)
-                    raise ValueError("Відео можна одне. Фото — до чотирьох.")
+                    raise ValueError("Відео можна одне. Фото - до чотирьох.")
                 prepared.append((kind, stored_name, digest))
         except ValueError as exc:
             for _kind, name, _digest in prepared:

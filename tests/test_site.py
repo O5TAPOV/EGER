@@ -12,7 +12,7 @@ from app import create_app, pow_ok
 
 def solve(challenge):
     n = 0
-    while n < 200000:
+    while n < 2000000:
         nonce = format(n, "x")
         if pow_ok(challenge, nonce, 4):
             return nonce
