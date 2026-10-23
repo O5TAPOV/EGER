@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Результати{% endblock %}
+{% block body %}
+<h2>Результати на {{ stats.day }}</h2>
+<p>Усього голосів: <b>{{ stats.total }}</b>. Це самовибірка. Хто не заходив, той не порахований. Один браузер — один актуальний голос. Очистиш дані сайту в браузері і зайдеш з іншого, технічно зможеш проголосувати ще раз. Ми не звіряємо людину зі списком студентів, бо цього списку у нас немає і не буде.</p>
+<table class="data">
+  <tr><th>Варіант</th><th>Голосів</th><th>Частка</th><th></th></tr>
+  {% for item in stats["items"] %}
+  <tr>
+    <td>{{ item.label }}</td>
+    <td>{{ item.n }}</td>
+    <td>{{ "%.1f"|format(item.pct) }}%</td>
+    <td style="width:34%"><div class="bar"><span style="width: {{ item.pct }}%"></span></div></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h3>Хто як назвався</h3>
+<table class="data">
+  <tr><th></th><th>Голосів</th></tr>
+  {% for row in stats["forms"] %}
+  <tr><td>{{ row.name }}</td><td>{{ row.n }}</td></tr>
+  {% else %}
+  <tr><td colspan="2">Поки ніхто.</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Факультети</h3>
+<p class="note">Хто вибрав «не вказую», у розріз майже не потрапляє. Так і задумано.</p>
+<table class="data">
+  <tr><th>Факультет</th><th>Голосів</th></tr>
+  {% for row in stats["faculties"] %}
+  <tr><td>{{ row.name }}</td><td>{{ row.n }}</td></tr>
+  {% endfor %}
+</table>
+
+<h3>Контрольна сума</h3>
+<p>SHA-256 списку бюлетенів. Якщо хтось тихенько підправить базу, сума зміниться і розійдеться зі збереженою копією.</p>
+<p class="mono">{{ stats.audit }}</p>
+<p>
+  <a href="/export/ballots.txt">Скачати бюлетені (txt)</a><br>
+  <a href="/export/results.json">Скачати підсумок (json)</a>
+</p>
+<p class="note">У файлі немає імен. Є порядок запису і день, без хвилин. Хто тримає сервер, технічно може дописати рядки. Тому редакції варто зберегти файл у себе в ту хвилину, коли цитує цифру.</p>
+{% endblock %}

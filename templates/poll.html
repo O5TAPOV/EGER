@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Опитування{% endblock %}
+{% block body %}
+<h2>Один варіант. Без імені.</h2>
+<p>Питання: якщо тривоги лишаються такими ж частими, який формат на найближчі тижні?</p>
+<p class="note">Факультет і курс краще не чіпати, якщо на спеціальності вас мало. «Не вказую» — нормальна відповідь. Повторний захід з цього браузера замінює попередній голос, а не додає другий. Деталі на сторінці <a href="/method">як це зібрано</a>.</p>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+<noscript><p class="err">Без JavaScript голос не приймемо. Інакше опитування накручується за хвилину, а прив'язувати людину до голосу ми не будемо.</p></noscript>
+<form class="pow" method="post" action="/poll" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="challenge" value="{{ challenge }}">
+  <input type="hidden" name="nonce" value="">
+  <input type="hidden" name="ballot" value="">
+  {% for code, label in choices %}
+  <label><input type="radio" name="choice" value="{{ code }}"> {{ label }}</label>
+  {% endfor %}
+  <p>
+    <label>Факультет
+      <select name="faculty">
+        {% for name in faculties %}<option>{{ name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Курс
+      <select name="course">
+        {% for name in courses %}<option>{{ name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Хто ти
+      <select name="form">
+        {% for name in forms %}<option>{{ name }}</option>{% endfor %}
+      </select>
+    </label>
+  </p>
+  <p><input type="submit" value="Віддати голос"></p>
+  <p class="powstatus"></p>
+</form>
+{% endblock %}

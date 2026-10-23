@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>{% block title %}Де анкета?{% endblock %} — ВДПУ</title>
+<meta name="description" content="В.о. ректора ВДПУ сказала Суспільному, що більшість студентів обрала очне. Анкети студенти не бачили. Тут відкритий підрахунок і історії без імен.">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="wrap">
+  <div id="top">
+    <h1><a href="/">Де анкета?</a></h1>
+    <p>ВДПУ. Очне під час тривог. Голоси і історії без імен. {{ today }}</p>
+  </div>
+  <div class="menu">
+    [ <a href="/">Головна</a> ]
+    [ <a href="/poll">Опитування</a> ]
+    [ <a href="/results">Результати</a> ]
+    [ <a href="/stories">Історії</a> ]
+    [ <a href="/stories/new">Додати</a> ]
+    [ <a href="/facts">Звідки цитати</a> ]
+    [ <a href="/method">Як це зібрано</a> ]
+    [ <a href="/press">Для редакції</a> ]
+  </div>
+  {% block body %}{% endblock %}
+  <footer>
+    Сторінку зібрали 23 жовтня 2026, бо фраза про «більшість» уже вийшла в ефір, а таблиці до неї немає.
+    Цифри опитування рахуються самі. Тексти з цитатами правимо руками, коли виходить новий сюжет.
+    <br>
+    <a href="/method">Що сайт зберігає, а що ні</a>.
+    Пошуковикам дописи студентів не віддаємо.
+  </footer>
+</div>
+<script src="/static/pow.js"></script>
+</body>
+</html>
