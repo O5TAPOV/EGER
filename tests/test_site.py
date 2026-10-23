@@ -60,11 +60,30 @@ def test_pages_quote_rector_and_skip_the_channel_trash(tmp_path):
     home = client.get("/").get_data(as_text=True)
     assert "Замкова" in home
     assert "анкет" in home
+    assert "гугл-форм" in home.lower()
+    assert "окремої анкети їм не давали" not in home
+    assert "Це дірка" not in home
+    assert 'target="_blank"' in home
     assert "suspilne.media" in home
     facts = client.get("/facts").get_data(as_text=True)
     assert "Юлія Жалюк" in facts
+    assert "ерготерапію" in facts
+    assert "гугл-форм" in facts.lower()
     assert "nnpol13.pdf" in facts
     assert "4,5" in facts or "4.5" in facts
+    press = client.get("/press").get_data(as_text=True)
+    assert "окремої анкети їм не давали" not in press
+    assert "гугл-форму" in press
+    poll = client.get("/poll").get_data(as_text=True)
+    assert "по черзі" in poll
+    assert "2 тижні" in poll
+    assert "10 днів" in poll
+    method = client.get("/method").get_data(as_text=True)
+    assert "не має стосунку до ВДПУ" in method
+    assert "не перевірити" in facts
+    for html in (home, facts, press, poll, method):
+        assert "\u2014" not in html
+        assert "\u2013" not in html
 
 
 def test_vote_is_one_row_and_has_no_ip(tmp_path):
@@ -243,3 +262,17 @@ def test_admin_hide_is_invisible_without_token(tmp_path):
     hidden = client.post("/sluzhba/hide", data={"post_id": "1"}, headers={"X-Admin-Token": "adminkeytokenvalue123456"})
     assert hidden.status_code == 200
     assert client.get("/p/1").status_code == 404
+
+
+def test_templates_external_links_and_dashes():
+    root = Path(__file__).resolve().parents[1] / "templates"
+    found = 0
+    for path in root.glob("*.html"):
+        body = path.read_text(encoding="utf-8")
+        assert "\u2014" not in body, path.name
+        assert "\u2013" not in body, path.name
+        for tag in re.findall(r"<a\s[^>]*href=\"https?://[^\"]+\"[^>]*>", body):
+            found += 1
+            assert 'target="_blank"' in tag, tag
+            assert "noopener" in tag, tag
+    assert found >= 4
