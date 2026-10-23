@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Історії{% endblock %}
+{% block body %}
+<h2>Історії</h2>
+<p>Без імен. Фото перезбережені, з них зрізані дані телефону. Відео перекодоване. <a href="/stories/new">Додати своє</a>.</p>
+<p class="note">Сюди не треба кидати чужі прізвища, студентські і обличчя. Таке знімаємо.</p>
+{% if not items %}
+<p>Поки порожньо. Одне фото підвалу без облич важить більше, ніж ще один злий абзац у чаті.</p>
+{% endif %}
+{% for item in items %}
+<hr>
+<p><b>{{ item.category }}</b>
+{% if item.faculty != "Не вказую" %} · {{ item.faculty }}{% endif %}
+{% if item.course != "Не вказую" %} · курс {{ item.course }}{% endif %}
+ · {{ item.day }}</p>
+<p>{{ item.excerpt }}</p>
+<p><a href="/p/{{ item.id }}">Відкрити</a></p>
+{% endfor %}
+{% endblock %}

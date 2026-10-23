@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Нова історія{% endblock %}
+{% block body %}
+<h2>Додати історію</h2>
+<div class="warn">
+  <b>Тебе видно не в базі, а в тому, що сам покладеш у текст і в кадр.</b>
+  Не знімай обличчя і голос. Не клади студентський, розклад зі своїм прізвищем, переписку, де тебе назвали на ім'я.
+  Кадруй стіну, двері укриття, плісняву, воду, квиток без прізвища, скрін оголошення.
+  Айфон інколи шле HEIC. Якщо файл не візьме, постав у камері «найбільш сумісні» або зроби скрін.
+</div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+<noscript><p class="err">Без JavaScript форму не приймемо: інакше сюди за хвилину наливають сміття.</p></noscript>
+<form class="pow" method="post" action="/stories/new" enctype="multipart/form-data" autocomplete="off">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="challenge" value="{{ challenge }}">
+  <input type="hidden" name="nonce" value="">
+  <label>Про що це
+    <select name="category">
+      {% for name in categories %}<option>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Факультет
+    <select name="faculty">
+      {% for name in faculties %}<option>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Курс
+    <select name="course">
+      {% for name in courses %}<option>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Текст
+    <textarea name="body" required maxlength="4000"></textarea>
+  </label>
+  <label>Фото або одне коротке відео, до 3 хвилин
+    <input type="file" name="files" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" multiple>
+  </label>
+  <label><input type="checkbox" name="agree" value="1"> Я не називаю себе і не вантажу чужі обличчя, документи й контакти.</label>
+  <p><input type="submit" value="Надіслати"></p>
+  <p class="powstatus"></p>
+</form>
+<p class="note">Після відправки побачиш довгий ключ. Ним можна стерти допис. Ми цей ключ не зберігаємо. Загубиш - сам уже не зітреш.</p>
+{% endblock %}

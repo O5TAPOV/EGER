@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Допис є{% endblock %}
+{% block body %}
+<h2>Допис викладено</h2>
+<p><a href="/p/{{ post_id }}">Відкрити його</a></p>
+<div class="warn">
+  <b>Ключ на видалення. Покажемо один раз.</b>
+  <p>Скопіюй і сховай у себе. На сервері лежить тільки хеш. Хто має цей рядок, той може стерти допис. Більше ніхто з відвідувачів.</p>
+  <textarea readonly rows="3">{{ token }}</textarea>
+</div>
+{% endblock %}

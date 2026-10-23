@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Історія {{ post.id }}{% endblock %}
+{% block body %}
+<p class="note">{{ post.day }} · {{ post.category }}
+{% if post.faculty != "Не вказую" %} · {{ post.faculty }}{% endif %}
+{% if post.course != "Не вказую" %} · курс {{ post.course }}{% endif %}
+</p>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+<p style="white-space: pre-wrap">{{ post.body }}</p>
+{% for m in media %}
+  {% if m.kind == "image" %}
+  <img class="shot" src="/media/{{ m.filename }}" alt="фото до історії">
+  {% else %}
+  <video controls preload="metadata" src="/media/{{ m.filename }}"></video>
+  {% endif %}
+{% endfor %}
+<hr>
+<h3>Стерти цей допис</h3>
+<p class="note">Встав ключ, який показали один раз після публікації.</p>
+<form method="post" action="/p/{{ post.id }}/delete">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="text" name="token" size="70" autocomplete="off" spellcheck="false">
+  <input type="submit" value="Видалити">
+</form>
+<p><a href="/stories">До списку</a></p>
+{% endblock %}
